@@ -1,0 +1,56 @@
+[project]
+name = "wink-starter"
+version = "0.1.0"
+description = "Secret Trivia Agent - a WINK starter demonstrating background agents"
+requires-python = ">=3.12"
+dependencies = [
+    "redis",
+    "weakincentives[claude-agent-sdk,redis,skills]",
+]
+
+[project.scripts]
+trivia-agent = "trivia_agent.worker:main"
+trivia-dispatch = "trivia_agent.dispatch:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/trivia_agent"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=src/trivia_agent --cov-branch --cov-report=term-missing --cov-fail-under=100"
+timeout = 10
+timeout_method = "thread"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+include = ["src"]
+typeCheckingMode = "strict"
+
+[tool.uv.sources]
+weakincentives = { git = "https://github.com/weakincentives/weakincentives.git", tag = "v0.23.0" }
+
+[dependency-groups]
+dev = [
+    "fakeredis",
+    "pytest",
+    "pytest-cov",
+    "pytest-timeout",
+    "pyright",
+    "ruff",
+    "weakincentives[wink] @ git+https://github.com/weakincentives/weakincentives.git@v0.23.0",
+    "pytest-rerunfailures>=16.1",
+]

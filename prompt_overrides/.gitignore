@@ -1,0 +1,6 @@
+# Ignore all override files (they are local customizations)
+*.json
+
+# But track the directory structure
+!.gitignore
+!README.md
