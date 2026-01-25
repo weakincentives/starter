@@ -31,7 +31,7 @@ help:
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean          Remove build artifacts"
-	@echo "  make clean-bundles  Remove debug bundles"
+	@echo "  make clean-bundles  Remove debug bundles (.zip, .zip.sqlite, eval dirs)"
 
 # =============================================================================
 # Setup
@@ -118,4 +118,7 @@ clean:
 
 clean-bundles:
 	rm -f debug_bundles/*.zip
+	rm -f debug_bundles/*.zip.sqlite
+	@# Remove UUID directories from eval runs (preserve .gitignore, README.md)
+	@find debug_bundles -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} + 2>/dev/null || true
 	@echo "Debug bundles cleaned"
