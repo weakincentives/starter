@@ -10,34 +10,17 @@ Prompt overrides let you customize section visibility, tool behavior, and other 
 - **A/B testing**: Run experiments with different prompt configurations
 - **Debugging**: Expand hidden sections to see full context
 
-## Directory Structure
+## How Overrides are Created
 
-Override files are organized by namespace, prompt key, and tag:
+Override files are **automatically seeded** when the agent starts. The `LocalPromptOverridesStore` creates the initial override files based on the current prompt template. You can then edit these JSON files to customize behavior.
 
-```
-prompt_overrides/
-├── trivia/
-│   └── main/
-│       ├── latest/           # Default tag
-│       │   └── overrides.json
-│       └── experiment-v2/    # Custom experiment tag
-│           └── overrides.json
-```
-
-## Creating Overrides
-
-Use the WINK CLI to seed and manage overrides:
+To seed overrides, simply run the agent:
 
 ```bash
-# Seed overrides from the current prompt template
-uv run wink overrides seed trivia:main --tag latest
-
-# List available overrides
-uv run wink overrides list
-
-# Edit overrides
-uv run wink overrides edit trivia:main --tag latest
+make agent
 ```
+
+This creates override files in the directory structure organized by namespace, prompt key, and tag.
 
 ## Override Format
 
@@ -60,10 +43,10 @@ Override files are JSON with section visibility and tool settings:
 
 ## Using Overrides
 
-Overrides are automatically loaded when the agent starts. Set the tag via:
+Overrides are automatically loaded when the agent starts. Control override behavior via:
 
-1. **Environment variable**: `TRIVIA_PROMPT_OVERRIDES_DIR`
-2. **Experiment metadata**: Pass `--experiment` flag to dispatch-eval
+1. **Environment variable**: `TRIVIA_PROMPT_OVERRIDES_DIR` sets the directory for override files
+2. **Experiment metadata**: Pass `--experiment` flag to dispatch-eval to use a specific overrides tag
 
 ## Configuration
 
@@ -71,4 +54,4 @@ Overrides are automatically loaded when the agent starts. Set the tag via:
 |----------|---------|-------------|
 | `TRIVIA_PROMPT_OVERRIDES_DIR` | `./prompt_overrides` | Override files directory |
 
-Override files in this directory are gitignored by default.
+Override files in this directory are gitignored by default (see `.gitignore`).
