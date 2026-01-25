@@ -1,5 +1,7 @@
 # WINK Starter: Secret Trivia Agent
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/weakincentives/starter)
+
 A minimal starter project demonstrating how to build background agents with [Weak Incentives (WINK)](https://github.com/weakincentives/weakincentives). This example implements a **secret trivia game** where the agent knows hidden answers that players must discover.
 
 > **Note**: This repository is optimized for Claude to implement features end-to-end. It maintains 100% test coverage, includes comprehensive project context in `AGENTS.md` (symlinked as `CLAUDE.md`), and follows patterns that enable Claude to understand, modify, and test the codebase autonomously. Claude can explore WINK documentation via `uv run wink docs` and inspect execution artifacts via `uv run wink query debug_bundles/*.zip`.
