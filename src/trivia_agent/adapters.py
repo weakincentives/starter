@@ -1,4 +1,20 @@
-"""Runtime adapter configuration for the trivia agent."""
+"""Runtime adapter configuration for the trivia agent.
+
+This module provides the adapter layer between the trivia agent and the WINK
+runtime. The adapter configures how the agent interacts with the Claude model,
+handles task completion, and manages execution isolation.
+
+Key components:
+    - ``SimpleTaskCompletionChecker``: Pass-through completion checker
+    - ``create_adapter``: Factory function to build configured adapters
+
+The default model is Claude Sonnet, accessed via the "sonnet" alias.
+
+Usage:
+    >>> from trivia_agent.adapters import create_adapter
+    >>> adapter = create_adapter()
+    >>> # Pass adapter to MainLoop.create() or EvalLoop.create()
+"""
 
 from __future__ import annotations
 
@@ -21,20 +37,44 @@ DEFAULT_MODEL = "sonnet"
 
 
 class SimpleTaskCompletionChecker:
-    """A simple task completion checker that always succeeds.
+    """Task completion checker that unconditionally marks tasks as complete.
 
-    For the trivia agent, once structured output is produced, the task is complete.
-    No additional verification is needed.
+    This checker implements a pass-through completion strategy where any task
+    that produces structured output is considered complete. It is designed for
+    scenarios where the structured output itself (e.g., TriviaResponse) serves
+    as sufficient proof of task completion.
+
+    Use this checker when:
+        - Task success is determined solely by producing valid structured output
+        - No additional validation logic is required after response generation
+        - You want the simplest possible completion behavior
+
+    For more complex scenarios requiring validation (e.g., checking answer
+    correctness, verifying external state), implement a custom checker with
+    conditional logic in the ``check`` method.
+
+    Example:
+        >>> checker = SimpleTaskCompletionChecker()
+        >>> result = checker.check(context)
+        >>> assert result.is_ok()
     """
 
     def check(self, context: TaskCompletionContext) -> TaskCompletionResult:
-        """Always returns ok() since trivia tasks complete with structured output.
+        """Evaluate task completion and return success unconditionally.
+
+        This method is called by the WINK runtime after the agent produces
+        structured output. It always returns ``TaskCompletionResult.ok()``,
+        signaling that no further agent iterations are needed.
 
         Args:
-            context: Task completion context (unused).
+            context: The task completion context provided by the runtime.
+                Contains information about the current task state, but is
+                unused in this implementation since completion is unconditional.
 
         Returns:
-            TaskCompletionResult.ok() indicating the task is complete.
+            TaskCompletionResult: Always returns ``TaskCompletionResult.ok()``
+                indicating successful task completion. The agent will stop
+                processing and return its response to the caller.
         """
         return TaskCompletionResult.ok()
 
@@ -44,14 +84,40 @@ def create_adapter(
     isolation: IsolationConfig | None = None,
     cwd: str | None = None,
 ) -> ClaudeAgentSDKAdapter[TriviaResponse]:
-    """Create a Claude Agent SDK adapter for the trivia agent.
+    """Create and configure a Claude Agent SDK adapter for the trivia agent.
+
+    Factory function that assembles all components needed to run the trivia
+    agent: model selection, task completion checking, isolation configuration,
+    and working directory setup. The returned adapter is ready to be passed
+    to a WINK MainLoop or EvalLoop.
+
+    The adapter is configured with:
+        - Model: Claude Sonnet (via the "sonnet" alias)
+        - Completion checker: SimpleTaskCompletionChecker (always succeeds)
+        - Response type: TriviaResponse (structured output schema)
 
     Args:
-        isolation: Optional isolation configuration with skills and sandbox.
-        cwd: Optional working directory for the agent.
+        isolation: Optional isolation configuration that controls the agent's
+            execution environment. When provided, specifies:
+            - Skills to load (e.g., secret-trivia skill with answers)
+            - Sandbox settings restricting file/network access
+            If None, the agent runs without isolation constraints.
+        cwd: Optional working directory path for the agent. The agent will
+            execute with this directory as its current working directory.
+            If None, uses the default working directory.
 
     Returns:
-        A configured ClaudeAgentSDKAdapter instance.
+        ClaudeAgentSDKAdapter[TriviaResponse]: A fully configured adapter
+            instance typed to produce TriviaResponse structured output.
+            Pass this adapter to ``MainLoop.create()`` or ``EvalLoop.create()``
+            to run the trivia agent.
+
+    Example:
+        >>> from trivia_agent.isolation import create_isolation_config
+        >>> isolation = create_isolation_config()
+        >>> adapter = create_adapter(isolation=isolation, cwd="/path/to/workspace")
+        >>> # Use adapter with MainLoop
+        >>> loop = MainLoop.create(adapter=adapter, sections=[...])
     """
     checker = SimpleTaskCompletionChecker()
     client_config = ClaudeAgentSDKClientConfig(

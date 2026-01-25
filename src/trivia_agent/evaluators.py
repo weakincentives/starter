@@ -1,15 +1,30 @@
 """Custom evaluators for the trivia agent.
 
-This module demonstrates:
-- Custom scoring logic with multiple criteria
-- Session-aware evaluator signature (for behavioral checks)
+This module provides evaluation functions for scoring trivia agent responses.
+Evaluators are used by WINK's eval system to automatically grade agent outputs
+against expected answers.
 
-Evaluators score agent outputs against expectations. The trivia_evaluator
-checks answer correctness and brevity.
+Key capabilities:
+    - Multi-criteria scoring (correctness + brevity)
+    - Session-aware evaluation for behavioral checks
+    - Configurable pass/fail thresholds
+
+Usage:
+    Evaluators are registered in the EvalLoop and called automatically during
+    evaluation runs. They receive the agent's structured output and expected
+    answer, returning a Score object.
+
+    To run an evaluation::
+
+        make dispatch-eval QUESTION="What is the secret number?" EXPECTED="42"
 
 For session-aware behavioral checks (e.g., inspecting tool usage), WINK's
-slice architecture provides typed access via `session[SliceClass].latest()`.
+slice architecture provides typed access via ``session[SliceClass].latest()``.
 See the SESSIONS spec for details on dispatching events and querying state.
+
+See Also:
+    - ``weakincentives.evals.Score``: The score dataclass returned by evaluators
+    - ``trivia_agent.eval_loop``: EvalLoop configuration using this evaluator
 """
 
 from __future__ import annotations
@@ -27,22 +42,55 @@ def trivia_evaluator(
     expected: str,
     session: Any = None,
 ) -> Score:
-    """Evaluator for trivia responses.
+    """Evaluate a trivia agent response for correctness and quality.
 
-    This evaluator checks:
-    1. The secret answer is correct (must contain expected value)
-    2. Response is concise (trivia answers should be brief)
+    Scores the agent's answer against the expected secret using two criteria:
 
-    The session parameter enables behavioral checks (e.g., inspecting tool
-    usage from session state) when WINK's slice architecture is used.
+    1. **Correctness** (50% of score): The expected secret must appear in the
+       agent's answer (case-insensitive substring match). This is a hard
+       requirement - incorrect answers always fail regardless of other scores.
+
+    2. **Brevity** (50% of score): Trivia answers should be concise.
+       - 20 words or fewer: 1.0 (perfect)
+       - 21-50 words: 0.7 (acceptable)
+       - 51+ words: 0.3 (too verbose)
+
+    The final score is the average of both criteria. A response passes if:
+    - The total score is >= 0.6, AND
+    - The correctness check passed (secret was found)
 
     Args:
-        output: The agent's response.
-        expected: The expected secret answer.
-        session: Read-only view of the session (for behavioral checks).
+        output: The agent's structured response containing the answer text.
+            Must have an ``answer`` attribute (str) with the trivia answer.
+        expected: The expected secret answer to check for (e.g., "42", "banana").
+            Matching is case-insensitive and uses substring containment.
+        session: Optional read-only session view for behavioral checks.
+            Use ``session[SliceClass].latest()`` to inspect tool usage,
+            state changes, or other session data. Defaults to None.
 
     Returns:
-        Score with value 0.0-1.0, pass/fail, and explanation.
+        A ``Score`` object with:
+            - ``value`` (float): Combined score from 0.0 to 1.0
+            - ``passed`` (bool): True if answer is correct and score >= 0.6
+            - ``reason`` (str): Semicolon-separated explanations for each criterion
+
+    Example:
+        Direct usage (typically called by WINK's eval system)::
+
+            from trivia_agent.evaluators import trivia_evaluator
+            from trivia_agent.models import TriviaResponse
+
+            response = TriviaResponse(answer="The secret number is 42!")
+            score = trivia_evaluator(response, expected="42")
+
+            print(score.passed)  # True
+            print(score.value)   # 1.0 (correct and brief)
+            print(score.reason)  # "Correct! Secret '42' found; Perfect brevity (6 words)"
+
+    Note:
+        This evaluator is registered in ``eval_loop.py`` and runs automatically
+        during ``make dispatch-eval`` commands. You typically don't call it
+        directly unless writing custom evaluation scripts.
     """
     scores: list[tuple[float, str]] = []
 

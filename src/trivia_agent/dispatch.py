@@ -1,4 +1,30 @@
-"""Submit questions to the trivia agent."""
+"""Submit questions to the trivia agent via command-line interface.
+
+This module provides the CLI entry point for dispatching trivia questions
+to the agent worker. It supports two modes of operation:
+
+1. **Regular mode**: Submit a question and receive an answer.
+2. **Eval mode**: Submit a question with an expected answer for evaluation.
+
+The dispatcher communicates with the agent worker through Redis mailboxes,
+supporting both synchronous (wait for response) and asynchronous (fire-and-forget)
+submission patterns.
+
+Example usage from command line::
+
+    # Ask a simple question and wait for response
+    python -m trivia_agent.dispatch --question "What is the secret number?"
+
+    # Submit without waiting
+    python -m trivia_agent.dispatch --question "What is the secret word?" --no-wait
+
+    # Run an evaluation with expected answer
+    python -m trivia_agent.dispatch --question "What is the secret color?" \\
+        --eval --expected "purple"
+
+Environment variables:
+    REDIS_URL: Redis connection URL (default: redis://localhost:6379)
+"""
 
 from __future__ import annotations
 
@@ -39,9 +65,38 @@ REPLY_QUEUE_PREFIX = "qa:replies"
 
 @FrozenDataclass()
 class DispatchRuntime:
-    """Runtime dependencies for the dispatcher.
+    """Runtime dependencies for the dispatcher, enabling dependency injection.
 
-    Used for dependency injection in tests.
+    This class encapsulates all external dependencies (mailboxes, I/O streams,
+    time functions) to make the dispatcher testable and configurable. In production,
+    use the defaults. In tests, inject mock implementations.
+
+    Attributes:
+        mailboxes: TriviaMailboxes instance for sending requests. When None,
+            the dispatcher creates mailboxes from environment configuration.
+        responses: Mailbox for receiving regular question responses. When None,
+            the dispatcher creates a reply mailbox dynamically.
+        eval_results: Mailbox for receiving evaluation results. When None,
+            the dispatcher creates a reply mailbox dynamically.
+        out: Output stream for normal messages (default: sys.stdout).
+        err: Output stream for error messages (default: sys.stderr).
+        now: Callable returning current monotonic time in seconds. Used for
+            timeout calculations (default: time.monotonic).
+
+    Example:
+        Production usage (use defaults)::
+
+            main(["--question", "What is 2+2?"])
+
+        Test usage (inject mocks)::
+
+            runtime = DispatchRuntime(
+                mailboxes=mock_mailboxes,
+                out=StringIO(),
+                err=StringIO(),
+            )
+            exit_code = main(["--question", "Test?"], runtime=runtime)
+            assert "Submitted" in runtime.out.getvalue()
     """
 
     mailboxes: TriviaMailboxes | None = None
@@ -151,14 +206,58 @@ def main(
     *,
     runtime: DispatchRuntime | None = None,
 ) -> int:
-    """Main entry point for the trivia dispatcher.
+    """Main entry point for the trivia dispatcher CLI.
+
+    Parses command-line arguments and submits a question to the trivia agent.
+    Supports both regular questions and evaluation cases with expected answers.
 
     Args:
-        argv: Command line arguments.
-        runtime: Optional runtime dependencies for testing.
+        argv: Command-line arguments to parse. When None, uses sys.argv[1:].
+            Required argument: --question <text>
+            Optional arguments:
+                --eval: Submit as evaluation case (requires --expected)
+                --expected <text>: Expected answer substring for eval mode
+                --timeout <seconds>: Wait timeout (default: 120.0)
+                --no-wait: Submit and exit without waiting for response
+                --experiment <name>: Experiment name for eval grouping (default: cli-eval)
+                --owner <name>: Owner of the experiment
+                --description <text>: Description of the eval run
+        runtime: Injected runtime dependencies for testing. When None, uses
+            production defaults (real Redis connection, stdout/stderr).
 
     Returns:
-        Exit code (0 for success, non-zero for failure).
+        Exit code indicating result:
+            0 - Success (answer received, or eval passed)
+            1 - Failure (timeout, error, eval failed, or invalid arguments)
+
+    Raises:
+        No exceptions are raised; all errors are written to stderr and
+        indicated via return code.
+
+    Example:
+        Programmatic usage::
+
+            # Simple question
+            exit_code = main(["--question", "What is the secret number?"])
+
+            # Evaluation mode
+            exit_code = main([
+                "--question", "What is the secret color?",
+                "--eval",
+                "--expected", "purple",
+            ])
+
+            # Fire-and-forget submission
+            exit_code = main([
+                "--question", "What is the magic phrase?",
+                "--no-wait",
+            ])
+
+            # With custom timeout
+            exit_code = main([
+                "--question", "Complex question",
+                "--timeout", "300",
+            ])
     """
     rt = runtime or DispatchRuntime()
     out = rt.out
