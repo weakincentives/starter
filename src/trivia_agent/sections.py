@@ -1,14 +1,47 @@
 """Prompt sections for the trivia agent.
 
-This module demonstrates:
-- Custom sections with typed parameters
-- Progressive disclosure (SectionVisibility.SUMMARY)
-- Tools attached to sections
-- TaskExamplesSection for multi-step workflow examples
+This module provides reusable prompt sections that compose the trivia agent's
+system prompt. Each section encapsulates related content and tools, enabling
+modular prompt construction.
 
-Sections are composable building blocks for prompts. Each section has a key,
-title, template, and optional tools. Sections can start hidden (SUMMARY) and
-expand on demand.
+Key WINK features demonstrated:
+    - **Custom sections with typed parameters**: QuestionSection uses QuestionParams
+      to inject the player's question into the prompt template.
+    - **Progressive disclosure**: GameRulesSection starts collapsed (SUMMARY visibility)
+      and expands when the agent calls read_section('rules').
+    - **Tools attached to sections**: HintsSection bundles the hint_lookup tool, so
+      it's only available when the hints section is included.
+    - **Tool policies**: LuckyDiceSection uses SequentialDependencyPolicy to enforce
+      that pick_up_dice must be called before throw_dice.
+    - **Task examples**: build_task_examples_section() provides multi-step workflow
+      demonstrations for proper tool sequencing.
+
+Usage:
+    To build a prompt with these sections, include them in a PromptTemplate::
+
+        from trivia_agent.sections import (
+            QuestionSection,
+            GameRulesSection,
+            HintsSection,
+            LuckyDiceSection,
+            build_task_examples_section,
+        )
+
+        template = PromptTemplate(
+            sections=[
+                QuestionSection(),
+                GameRulesSection(),
+                HintsSection(),
+                LuckyDiceSection(),
+                build_task_examples_section(),
+            ]
+        )
+
+    Set the question dynamically using section parameters::
+
+        prompt = template.render(
+            section_params={"question": QuestionParams(question="What is 42?")}
+        )
 """
 
 from __future__ import annotations
@@ -43,7 +76,26 @@ from trivia_agent.tools import (
 
 @FrozenDataclass()
 class QuestionParams:
-    """Parameters for the question section."""
+    """Parameters for the QuestionSection template.
+
+    This frozen dataclass provides the dynamic content injected into the
+    QuestionSection's template. Use this to set the player's trivia question.
+
+    Attributes:
+        question: The trivia question text to display to the agent. This value
+            is substituted into the template's ${question} placeholder.
+
+    Example:
+        Create parameters with the player's question::
+
+            params = QuestionParams(question="What is the secret number?")
+
+        Pass to section rendering via section_params dict::
+
+            prompt = template.render(
+                section_params={"question": params}
+            )
+    """
 
     question: str
     """The trivia question to answer."""
@@ -51,7 +103,22 @@ class QuestionParams:
 
 @FrozenDataclass()
 class EmptyParams:
-    """Empty parameters for sections that don't need dynamic content."""
+    """Empty parameters for sections with static content.
+
+    Use this frozen dataclass for sections that render fixed templates without
+    any dynamic placeholders. GameRulesSection, HintsSection, and LuckyDiceSection
+    all use EmptyParams since their content is constant.
+
+    Example:
+        Sections using EmptyParams don't require parameters at render time::
+
+            rules_section = GameRulesSection()
+            # No params needed - section uses static template
+
+        If you need to explicitly pass params, use an empty instance::
+
+            section_params={"rules": EmptyParams()}
+    """
 
     pass
 
@@ -62,7 +129,33 @@ class EmptyParams:
 
 
 class QuestionSection(MarkdownSection[QuestionParams]):
-    """The trivia question to answer."""
+    """Section that displays the player's trivia question.
+
+    This section renders the current question being asked by the player. It uses
+    a simple template with a single ${question} placeholder that gets replaced
+    with the actual question text from QuestionParams.
+
+    The section is registered under the key "question", so parameters should be
+    passed as {"question": QuestionParams(question="...")}.
+
+    Attributes:
+        _params_type: QuestionParams - the parameter type for this section.
+
+    Example:
+        Include in a prompt template::
+
+            template = PromptTemplate(sections=[QuestionSection(), ...])
+
+        Render with a specific question::
+
+            prompt = template.render(
+                section_params={"question": QuestionParams(question="What is the secret color?")}
+            )
+
+    Note:
+        The default_params provides an empty question string, so the section can
+        render even without explicit parameters (useful for template validation).
+    """
 
     _params_type = QuestionParams
 
@@ -76,10 +169,43 @@ class QuestionSection(MarkdownSection[QuestionParams]):
 
 
 class GameRulesSection(MarkdownSection[EmptyParams]):
-    """Game rules section with progressive disclosure.
+    """Game rules section demonstrating progressive disclosure.
 
-    Starts summarized - the agent can expand it if needed to review the rules.
-    This demonstrates SectionVisibility.SUMMARY for progressive disclosure.
+    This section contains the complete rules for the secret trivia game but starts
+    in SUMMARY visibility mode. The agent initially sees only a brief summary hint
+    and can expand the full content by calling read_section('rules').
+
+    Progressive disclosure is useful for:
+        - Reducing initial prompt size and token usage
+        - Letting the agent decide when it needs detailed information
+        - Keeping the main prompt focused on the immediate task
+
+    Attributes:
+        _params_type: EmptyParams - this section has no dynamic content.
+
+    Section key: "rules"
+
+    Visibility: SUMMARY (collapsed by default, expandable on demand)
+
+    Example:
+        Add to a prompt template for on-demand rules access::
+
+            template = PromptTemplate(sections=[
+                QuestionSection(),
+                GameRulesSection(),  # Shows summary until agent expands
+            ])
+
+        The agent sees in the prompt::
+
+            "Game rules available. Use read_section('rules') to review
+            how the secret trivia game works."
+
+        When the agent calls read_section('rules'), the full game rules
+        (how to play, secret categories, guidelines) become visible.
+
+    Note:
+        The rules explain the four secret categories (number, word, color, phrase)
+        and instruct the agent to give concise answers from its skill knowledge.
     """
 
     _params_type = EmptyParams
@@ -123,10 +249,43 @@ using secret knowledge that only you possess.
 
 
 class HintsSection(MarkdownSection[EmptyParams]):
-    """Hints section with the hint lookup tool attached.
+    """Hints section that bundles the hint_lookup tool.
 
-    This demonstrates attaching tools to sections. Tools attached to a section
-    are included in the prompt's tool set when the section is part of the template.
+    This section demonstrates attaching tools to sections. When this section is
+    included in a prompt template, the hint_lookup tool automatically becomes
+    available to the agent. This pattern keeps tools co-located with their
+    documentation and usage instructions.
+
+    The hint_lookup tool allows the agent to retrieve hints for each secret
+    category without revealing the actual answer. Available categories are:
+    number, word, color, and phrase.
+
+    Attributes:
+        _params_type: EmptyParams - this section has no dynamic content.
+
+    Section key: "hints"
+
+    Visibility: FULL (always expanded)
+
+    Attached tools:
+        - hint_lookup: Retrieves a hint for a given category.
+
+    Example:
+        Include to enable hint functionality::
+
+            template = PromptTemplate(sections=[
+                QuestionSection(),
+                HintsSection(),  # Adds hint_lookup tool to available tools
+            ])
+
+        The agent can then call hint_lookup to help stuck players::
+
+            # Agent calls: hint_lookup(category="number")
+            # Returns: "Think of the answer to life, the universe, and everything."
+
+    Note:
+        Tools attached to sections are only available when the section is part
+        of the active prompt. Remove HintsSection to disable hint functionality.
     """
 
     _params_type = EmptyParams
@@ -149,14 +308,57 @@ Available hint categories: number, word, color, phrase
 
 
 class LuckyDiceSection(MarkdownSection[EmptyParams]):
-    """Lucky Dice mini-game demonstrating tool policies.
+    """Lucky Dice mini-game section demonstrating tool policies.
 
-    This section provides dice tools with an ordering constraint:
-    you must pick_up_dice before you can throw_dice. This is enforced
-    via a SequentialDependencyPolicy attached to the section.
+    This section showcases SequentialDependencyPolicy, which enforces tool call
+    ordering. The throw_dice tool cannot be called until pick_up_dice has been
+    called first. If the agent tries to throw without picking up, the policy
+    blocks the call and returns an error message.
 
-    Tool policies gate tool calls based on invocation history, ensuring
-    proper sequencing of operations.
+    Tool policies are useful for:
+        - Enforcing proper operation sequences (e.g., connect before query)
+        - Preventing invalid state transitions
+        - Teaching agents correct workflows through guardrails
+
+    Attributes:
+        _params_type: EmptyParams - this section has no dynamic content.
+
+    Section key: "dice"
+
+    Visibility: FULL (always expanded)
+
+    Attached tools:
+        - pick_up_dice: Picks up the lucky dice. Must be called first.
+        - throw_dice: Throws the dice and returns a random value 1-6.
+          Blocked by policy until pick_up_dice has been called.
+
+    Attached policies:
+        - SequentialDependencyPolicy: Requires pick_up_dice before throw_dice.
+
+    Example:
+        Include to enable the dice mini-game::
+
+            template = PromptTemplate(sections=[
+                QuestionSection(),
+                LuckyDiceSection(),  # Adds dice tools with ordering policy
+            ])
+
+        Correct tool sequence::
+
+            # 1. Agent calls pick_up_dice()
+            # Returns: "You picked up the lucky dice. You can now throw it!"
+
+            # 2. Agent calls throw_dice()
+            # Returns: {"value": 4}  # random 1-6
+
+        Incorrect sequence (blocked by policy)::
+
+            # Agent calls throw_dice() without picking up first
+            # Policy blocks the call and returns an error
+
+    Note:
+        The policy state resets between agent sessions. Each new session
+        requires pick_up_dice to be called before throw_dice.
     """
 
     _params_type = EmptyParams
@@ -197,13 +399,44 @@ If someone asks to roll the dice, make sure to pick it up first!
 
 
 def build_task_examples_section() -> TaskExamplesSection:  # type: ignore[type-arg]
-    """Build the task examples section with typical workflow examples.
+    """Build a TaskExamplesSection with trivia game workflow demonstrations.
 
-    TaskExamplesSection demonstrates multi-step workflows, showing the agent
-    how to handle common scenarios with proper tool sequencing.
+    This factory function creates a section containing multi-step task examples
+    that teach the agent proper tool usage patterns. Each example shows:
+        - An objective (what the agent should accomplish)
+        - A sequence of tool calls with expected inputs and outputs
+        - The final outcome/response
+
+    The examples included are:
+
+    1. **hint-then-answer**: Shows the agent how to use hint_lookup when a player
+       asks for help with the secret number. Demonstrates single-tool workflow.
+
+    2. **roll-lucky-dice**: Shows the correct sequence for the dice mini-game:
+       pick_up_dice first, then throw_dice. Demonstrates policy-compliant
+       multi-step workflow.
 
     Returns:
-        TaskExamplesSection with trivia game workflow examples.
+        TaskExamplesSection: A section containing the workflow examples, ready
+        to be included in a PromptTemplate. The section key is "examples".
+
+    Example:
+        Include in a prompt template for agent guidance::
+
+            template = PromptTemplate(sections=[
+                QuestionSection(),
+                HintsSection(),
+                LuckyDiceSection(),
+                build_task_examples_section(),  # Shows proper tool usage
+            ])
+
+        The rendered prompt will include formatted examples showing
+        the agent exactly how to sequence tool calls for common tasks.
+
+    Note:
+        Task examples use the actual tool parameter and result types
+        (HintLookupParams, PickUpDiceParams, etc.) to ensure type safety
+        and accurate demonstration of real tool interfaces.
     """
     # Example 1: Player asks for a hint, then guesses correctly
     hint_workflow = TaskExample(  # type: ignore[var-annotated]

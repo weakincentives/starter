@@ -65,15 +65,31 @@ DEFAULT_WORKSPACE_DIR = Path(__file__).parent.parent.parent / "workspace"
 
 
 def enumerate_workspace_mounts(workspace_dir: Path) -> tuple[HostMount, ...]:
-    """Enumerate files in workspace directory as mounts.
+    """Enumerate files in a workspace directory and create mount configurations.
 
-    Each file in the workspace directory is mounted at the workspace root.
+    Scans the given directory for files and creates HostMount objects that map
+    each file from the host filesystem into the agent's workspace. Files are
+    mounted at the workspace root level (preserving only the filename, not the
+    full path hierarchy).
+
+    Use this function when you need to seed an agent's workspace with files
+    from the host system, such as configuration files, reference documents,
+    or persona definitions.
 
     Args:
-        workspace_dir: Directory containing files to mount.
+        workspace_dir: Path to the host directory containing files to mount.
+            Must be an existing directory. Subdirectories are not recursed.
 
     Returns:
-        Tuple of HostMount objects for each file.
+        tuple[HostMount, ...]: Tuple of HostMount objects sorted alphabetically
+            by filename. Returns an empty tuple if the directory doesn't exist,
+            is not a directory, or contains no files.
+
+    Example:
+        >>> mounts = enumerate_workspace_mounts(Path("./workspace"))
+        >>> for mount in mounts:
+        ...     print(f"{mount.host_path} -> {mount.mount_path}")
+        /abs/path/workspace/CLAUDE.md -> CLAUDE.md
     """
     if not workspace_dir.exists() or not workspace_dir.is_dir():
         return ()
@@ -89,14 +105,36 @@ def create_workspace_section(
     session: Session,
     workspace_dir: Path,
 ) -> ClaudeAgentWorkspaceSection:
-    """Create a workspace section with seeded content from host.
+    """Create a workspace section that seeds agent workspace with host files.
+
+    Constructs a ClaudeAgentWorkspaceSection that mounts files from the host
+    filesystem into the agent's sandboxed workspace. This enables the agent
+    to access reference materials, persona definitions, or configuration files
+    that shape its behavior.
+
+    The workspace section must be created per-request because it binds to a
+    specific Session instance. Include the returned section in your
+    PromptTemplate's sections list.
 
     Args:
-        session: Session for the workspace section.
-        workspace_dir: Path to host directory to seed into workspace.
+        session: The Session instance this workspace section binds to. Each
+            request should have its own session for proper isolation.
+        workspace_dir: Path to the host directory containing files to seed.
+            All files in this directory (non-recursive) will be mounted at the
+            agent's workspace root.
 
     Returns:
-        ClaudeAgentWorkspaceSection configured with seed mounts.
+        ClaudeAgentWorkspaceSection: A configured section ready to be included
+            in a PromptTemplate. The section handles mounting files and provides
+            the agent with filesystem access tools.
+
+    Example:
+        >>> session = Session()
+        >>> workspace_section = create_workspace_section(
+        ...     session=session,
+        ...     workspace_dir=Path("./workspace"),
+        ... )
+        >>> template = PromptTemplate(sections=[..., workspace_section])
     """
     mounts = enumerate_workspace_mounts(workspace_dir)
     return ClaudeAgentWorkspaceSection(
@@ -107,20 +145,36 @@ def create_workspace_section(
 
 
 def build_prompt_template() -> PromptTemplate[TriviaResponse]:
-    """Build the trivia agent prompt template.
+    """Build the base prompt template for the trivia agent.
 
-    This template demonstrates WINK's differentiated capabilities:
-    - Multiple sections with different purposes
-    - Progressive disclosure (GameRulesSection starts summarized)
-    - Sections with attached tools (HintsSection)
-    - Task examples for multi-step workflow demonstrations
-    - Feedback providers for soft guidance
+    Constructs a PromptTemplate with all the core sections and feedback
+    providers for the trivia game. This template demonstrates several
+    WINK capabilities:
 
-    Note: The workspace section is created per-request in prepare()
-    because it needs a session reference.
+    - **Multiple sections**: QuestionSection, GameRulesSection, HintsSection,
+      LuckyDiceSection, and task examples each serve distinct purposes
+    - **Progressive disclosure**: GameRulesSection uses SUMMARY visibility,
+      showing condensed content until the agent needs full details
+    - **Sections with tools**: HintsSection provides the hint_lookup tool;
+      LuckyDiceSection provides pick_up_dice and throw_dice tools
+    - **Tool policies**: LuckyDiceSection enforces sequential tool ordering
+      via SequentialDependencyPolicy
+    - **Feedback providers**: TriviaHostReminder nudges the agent to give
+      direct answers without overthinking
+
+    Note: This function returns a base template without the workspace section.
+    The workspace section must be added per-request in TriviaAgentLoop.prepare()
+    because it requires a Session reference.
 
     Returns:
-        PromptTemplate configured with sections and feedback providers.
+        PromptTemplate[TriviaResponse]: A configured template ready to be
+            extended with a workspace section and bound to request parameters.
+            The template uses namespace "trivia" and key "main".
+
+    See Also:
+        TriviaAgentLoop.prepare: Adds workspace section and binds parameters.
+        sections.py: Contains the section implementations.
+        feedback.py: Contains the feedback provider implementations.
     """
     return PromptTemplate[TriviaResponse](
         ns="trivia",
@@ -137,12 +191,38 @@ def build_prompt_template() -> PromptTemplate[TriviaResponse]:
 
 
 class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
-    """MainLoop implementation for the trivia agent.
+    """Main processing loop for the trivia agent.
 
-    This loop demonstrates:
-    - Custom prepare() for request-specific prompt configuration
-    - Workspace seeding per request
-    - Integration with EvalLoop for evaluation
+    Extends MainLoop to handle TriviaRequest inputs and produce TriviaResponse
+    outputs. This loop demonstrates key WINK patterns for production agents:
+
+    - **Per-request preparation**: The prepare() method creates a fresh Session
+      and workspace section for each request, ensuring proper isolation
+    - **Workspace seeding**: Files from the host workspace directory are mounted
+      into each agent session (e.g., CLAUDE.md for persona definition)
+    - **Prompt overrides**: Supports LocalPromptOverridesStore for runtime
+      customization of prompt content without code changes
+    - **Evaluation integration**: Compatible with EvalLoop for running
+      evaluations with session-aware scoring
+
+    To use this loop, instantiate it with an adapter and mailbox, then either:
+    1. Call run() directly for single-threaded processing
+    2. Add to a LoopGroup with other loops (e.g., EvalLoop) for concurrent processing
+
+    Attributes:
+        _workspace_dir: Path to the directory containing workspace seed files.
+        _base_template: The base PromptTemplate (without workspace section).
+        _overrides_store: Optional store for prompt content overrides.
+
+    Example:
+        >>> adapter = create_adapter(isolation=isolation_config)
+        >>> loop = TriviaAgentLoop(
+        ...     adapter=adapter,
+        ...     requests=mailboxes.requests,
+        ...     config=MainLoopConfig(deadline=my_deadline),
+        ...     workspace_dir=Path("./workspace"),
+        ... )
+        >>> loop.run()  # Process requests until shutdown
     """
 
     _workspace_dir: Path
@@ -157,14 +237,28 @@ class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
         workspace_dir: Path | None = None,
         overrides_store: PromptOverridesStore | None = None,
     ) -> None:
-        """Initialize the trivia agent loop.
+        """Initialize the trivia agent loop with required dependencies.
+
+        Sets up the loop with an adapter for executing agent sessions, a mailbox
+        for receiving requests, and optional configuration for deadlines, debug
+        bundles, and prompt customization.
 
         Args:
-            adapter: Provider adapter for evaluation.
-            requests: Mailbox for incoming requests.
-            config: Optional MainLoop configuration.
-            workspace_dir: Optional workspace directory for seeding.
-            overrides_store: Optional prompt overrides store for local customizations.
+            adapter: ProviderAdapter[TriviaResponse] that executes agent sessions.
+                Typically created via create_adapter() with appropriate isolation
+                configuration (skills, sandbox settings, API keys).
+            requests: Mailbox for receiving MainLoopRequest[TriviaRequest] and
+                sending MainLoopResult[TriviaResponse]. Connect this to your
+                message queue (e.g., Redis via TriviaMailboxes).
+            config: Optional MainLoopConfig with deadline and debug bundle settings.
+                If None, uses default MainLoop configuration. Set config.deadline
+                to control maximum execution time per request.
+            workspace_dir: Path to directory containing files to seed into agent
+                workspace. Defaults to DEFAULT_WORKSPACE_DIR (project's workspace/
+                directory). Files here become accessible to the agent.
+            overrides_store: Optional PromptOverridesStore for runtime prompt
+                customization. Use LocalPromptOverridesStore to edit prompt
+                sections via files without restarting the worker.
         """
         super().__init__(adapter=adapter, requests=requests, config=config)
         self._workspace_dir = workspace_dir or DEFAULT_WORKSPACE_DIR
@@ -177,20 +271,37 @@ class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
         *,
         experiment: Experiment | None = None,
     ) -> tuple[Prompt[TriviaResponse], Session]:
-        """Prepare the prompt and session for a trivia request.
+        """Prepare the prompt and session for processing a trivia request.
 
-        This method demonstrates:
-        - Session creation per request
-        - Workspace section with seeded files
-        - Dynamic section composition
-        - Experiment-driven overrides
+        Called by the MainLoop for each incoming request. Creates a fresh Session
+        for isolation, builds the complete PromptTemplate with workspace section,
+        binds request parameters, and optionally applies experiment overrides.
+
+        This method demonstrates key WINK patterns:
+
+        - **Session per request**: Each request gets its own Session for proper
+          isolation between concurrent requests
+        - **Dynamic workspace section**: ClaudeAgentWorkspaceSection is created
+          here (not in build_prompt_template) because it needs the Session
+        - **Parameter binding**: Binds QuestionParams with the user's question
+          and EmptyParams for parameterless sections
+        - **Experiment support**: Uses experiment.overrides_tag to select prompt
+          variants for A/B testing; defaults to "latest"
+        - **Override seeding**: Automatically seeds the overrides store with
+          current prompt state, creating editable files for customization
 
         Args:
-            request: The trivia request containing the question.
-            experiment: Optional experiment for A/B testing.
+            request: TriviaRequest containing the question field. The question
+                is bound to QuestionSection via QuestionParams.
+            experiment: Optional Experiment instance for evaluation runs. When
+                provided, uses experiment.overrides_tag to select prompt variant.
+                Pass None for production requests.
 
         Returns:
-            A tuple of (prompt, session) ready for evaluation.
+            tuple[Prompt[TriviaResponse], Session]: A 2-tuple containing:
+                - Prompt: Fully configured prompt with all sections and bound
+                  parameters, ready for adapter.run()
+                - Session: Fresh session instance for this request's execution
         """
         session = Session()
 
@@ -240,9 +351,44 @@ class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
 
 @FrozenDataclass()
 class TriviaRuntime:
-    """Runtime dependencies for the trivia worker.
+    """Container for trivia worker runtime dependencies.
 
-    Used for dependency injection in tests.
+    Provides dependency injection for the main() function, enabling test
+    isolation without mocking. In production, pass None or omit to use
+    real implementations. In tests, inject mock or fake dependencies.
+
+    This pattern allows testing the full main() flow without requiring:
+    - A real Redis connection
+    - A real Claude API adapter
+    - Real stdout/stderr (capture output for assertions)
+
+    Attributes:
+        adapter: Optional ProviderAdapter for executing agent sessions.
+            If None, main() creates a real adapter using create_adapter().
+            Inject a mock adapter in tests to avoid API calls.
+        mailboxes: Optional TriviaMailboxes for request/response queues.
+            If None, main() creates real Redis-backed mailboxes.
+            Inject mock mailboxes in tests to control request flow.
+        out: TextIO stream for standard output messages (startup, status).
+            Defaults to sys.stdout. Inject StringIO in tests to capture output.
+        err: TextIO stream for error messages (configuration errors, failures).
+            Defaults to sys.stderr. Inject StringIO in tests to capture errors.
+
+    Example:
+        >>> # Production usage - use real dependencies
+        >>> main(runtime=None)
+
+        >>> # Test usage - inject fakes
+        >>> from io import StringIO
+        >>> runtime = TriviaRuntime(
+        ...     adapter=MockAdapter(),
+        ...     mailboxes=FakeMailboxes(),
+        ...     out=StringIO(),
+        ...     err=StringIO(),
+        ... )
+        >>> exit_code = main(runtime=runtime)
+        >>> assert exit_code == 0
+        >>> assert "Starting trivia agent" in runtime.out.getvalue()
     """
 
     adapter: ProviderAdapter[TriviaResponse] | None = None
@@ -256,14 +402,51 @@ def main(
     *,
     runtime: TriviaRuntime | None = None,
 ) -> int:
-    """Main entry point for the trivia agent worker.
+    """Start the trivia agent worker and process requests until shutdown.
+
+    Entry point for running the trivia agent as a long-lived worker process.
+    Initializes all dependencies (adapter, mailboxes, loops), then runs both
+    the MainLoop (for production requests) and EvalLoop (for evaluation
+    requests) concurrently via a LoopGroup.
+
+    The worker performs these steps:
+    1. Configures logging at DEBUG level
+    2. Loads Redis settings from environment variables
+    3. Validates ANTHROPIC_API_KEY is set
+    4. Creates the provider adapter with skill isolation
+    5. Connects to Redis mailboxes for request/response queues
+    6. Creates TriviaAgentLoop with deadline and debug bundle config
+    7. Creates EvalLoop for evaluation requests
+    8. Runs both loops in a LoopGroup until shutdown
+
+    Required Environment Variables:
+        ANTHROPIC_API_KEY: API key for Claude (validated early with clear error)
+        REDIS_URL: Redis connection URL (e.g., redis://localhost:6379)
+
+    Optional Environment Variables:
+        DEBUG_BUNDLES_DIR: Path for debug bundle output (ZIP files)
+        PROMPT_OVERRIDES_DIR: Path for prompt override files
 
     Args:
-        argv: Command line arguments (unused, for compatibility).
-        runtime: Optional runtime dependencies for testing.
+        argv: Command line arguments. Currently unused but accepted for
+            compatibility with standard CLI entry point patterns.
+        runtime: Optional TriviaRuntime for dependency injection. Pass None
+            in production to use real dependencies. Pass a configured
+            TriviaRuntime in tests to inject mocks/fakes.
 
     Returns:
-        Exit code (0 for success, non-zero for failure).
+        int: Exit code. Returns 0 on successful shutdown. Returns 1 on
+            configuration errors (missing env vars), adapter creation
+            failure, or Redis connection failure.
+
+    Example:
+        >>> # Run as CLI entry point
+        >>> if __name__ == "__main__":
+        ...     sys.exit(main())
+
+        >>> # Run with test dependencies
+        >>> runtime = TriviaRuntime(adapter=mock_adapter, mailboxes=mock_mailboxes)
+        >>> exit_code = main(runtime=runtime)
     """
     configure_logging(level="DEBUG")
 
