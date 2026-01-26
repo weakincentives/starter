@@ -32,7 +32,10 @@ from redis import Redis
 from weakincentives import FrozenDataclass
 from weakincentives.contrib.mailbox import RedisMailbox
 from weakincentives.evals import EvalRequest, EvalResult, Experiment, Sample
-from weakincentives.runtime import MainLoopRequest, MainLoopResult
+from weakincentives.runtime import (
+    MainLoopRequest as AgentLoopRequest,
+    MainLoopResult as AgentLoopResult,
+)
 from weakincentives.serde import parse
 
 from trivia_agent.config import RedisSettings
@@ -66,14 +69,14 @@ if TYPE_CHECKING:
 
 # Type aliases for the mailboxes
 RequestsMailbox = RedisMailbox[
-    MainLoopRequest[TriviaRequest],
-    MainLoopResult[TriviaResponse],
+    AgentLoopRequest[TriviaRequest],
+    AgentLoopResult[TriviaResponse],
 ]
 EvalRequestsMailbox = RedisMailbox[
     EvalRequest[TriviaRequest, str],
     EvalResult,
 ]
-ResponsesMailbox = RedisMailbox[MainLoopResult[TriviaResponse], None]
+ResponsesMailbox = RedisMailbox[AgentLoopResult[TriviaResponse], None]
 EvalResultsMailbox = RedisMailbox[EvalResult, None]
 
 
@@ -88,7 +91,7 @@ def build_reply_queue_name(prefix: str, request_id: "UUID") -> str:
         prefix: The base name for reply queues (e.g., "trivia-replies").
             Must be non-empty.
         request_id: The UUID of the request being processed. Typically
-            obtained from MainLoopRequest.id or EvalRequest.sample.id.
+            obtained from AgentLoopRequest.id or EvalRequest.sample.id.
 
     Returns:
         A queue name in the format "{prefix}-{request_id}".
@@ -113,12 +116,12 @@ class TriviaMailboxes:
 
     An immutable dataclass that groups together the mailboxes needed by the
     trivia agent worker. This container is returned by `create_mailboxes()`
-    and passed to the worker's main loop.
+    and passed to the worker's agent loop.
 
     Attributes:
         requests: Mailbox for regular trivia questions. Receives
-            MainLoopRequest[TriviaRequest] messages and allows sending
-            MainLoopResult[TriviaResponse] replies.
+            AgentLoopRequest[TriviaRequest] messages and allows sending
+            AgentLoopResult[TriviaResponse] replies.
         eval_requests: Mailbox for evaluation runs. Receives
             EvalRequest[TriviaRequest, str] messages (where str is the
             expected answer) and allows sending EvalResult replies.
@@ -149,7 +152,7 @@ def create_mailboxes(settings: RedisSettings) -> TriviaMailboxes:
 
     Factory function that initializes the Redis connection and creates
     both the requests and eval_requests mailboxes. Call this once at
-    worker startup and pass the result to your main loop.
+    worker startup and pass the result to your agent loop.
 
     The function creates a single Redis client that is shared between
     both mailboxes for efficient connection pooling.
@@ -173,8 +176,8 @@ def create_mailboxes(settings: RedisSettings) -> TriviaMailboxes:
             settings = RedisSettings()  # Loads from environment
             mailboxes = create_mailboxes(settings)
 
-            # Pass to MainLoop
-            main_loop = MainLoop(
+            # Pass to AgentLoop
+            agent_loop = AgentLoop(
                 mailboxes=[mailboxes.requests, mailboxes.eval_requests],
                 ...
             )
@@ -184,7 +187,7 @@ def create_mailboxes(settings: RedisSettings) -> TriviaMailboxes:
     requests: RequestsMailbox = RedisMailbox(
         name=settings.requests_queue,
         client=client,
-        body_type=MainLoopRequest[TriviaRequest],
+        body_type=AgentLoopRequest[TriviaRequest],
     )
 
     eval_requests: EvalRequestsMailbox = RedisMailbox(
@@ -202,7 +205,7 @@ def create_mailboxes(settings: RedisSettings) -> TriviaMailboxes:
 def create_responses_mailbox(
     client: Redis,  # type: ignore[type-arg]
     queue_name: str,
-) -> "Mailbox[MainLoopResult[TriviaResponse], None]":
+) -> "Mailbox[AgentLoopResult[TriviaResponse], None]":
     """Create a responses mailbox for receiving replies from the worker.
 
     Used by dispatch scripts to create a dedicated mailbox for receiving
@@ -219,7 +222,7 @@ def create_responses_mailbox(
             `build_reply_queue_name(prefix, request_id)`.
 
     Returns:
-        A mailbox that yields MainLoopResult[TriviaResponse] messages.
+        A mailbox that yields AgentLoopResult[TriviaResponse] messages.
         Iterate over it or call methods like `.get()` to receive responses.
 
     Example:
@@ -240,11 +243,11 @@ def create_responses_mailbox(
             print(result.body.answer)
     """
     return cast(
-        "Mailbox[MainLoopResult[TriviaResponse], None]",
+        "Mailbox[AgentLoopResult[TriviaResponse], None]",
         RedisMailbox(
             name=queue_name,
             client=client,
-            body_type=MainLoopResult[TriviaResponse],
+            body_type=AgentLoopResult[TriviaResponse],
         ),
     )
 
@@ -258,7 +261,7 @@ def create_eval_results_mailbox(
     Used by eval dispatch scripts to create a dedicated mailbox for receiving
     the evaluation result for a specific sample. Similar to
     `create_responses_mailbox()` but typed for EvalResult instead of
-    MainLoopResult.
+    AgentLoopResult.
 
     The EvalResult contains the evaluation score and any evaluator-specific
     metadata from the trivia_evaluator.

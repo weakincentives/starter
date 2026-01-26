@@ -3,12 +3,12 @@
 This module provides evaluation capabilities for the trivia agent,
 allowing you to test agent responses against expected secret answers.
 
-The EvalLoop wraps your production MainLoop, ensuring evaluations run
+The EvalLoop wraps your production AgentLoop, ensuring evaluations run
 against your exact agent configuration with no drift or separate test harness.
 
 Key features:
     - Session-aware evaluators for behavioral assertions
-    - Integration with MainLoop for consistent execution
+    - Integration with AgentLoop for consistent execution
     - Collocated evals (same prompts, tools, and config as production)
     - Debug bundles with eval metadata for tracing
 

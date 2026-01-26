@@ -1,7 +1,7 @@
-"""MainLoop + EvalLoop entry point for the trivia agent.
+"""AgentLoop + EvalLoop entry point for the trivia agent.
 
 This module demonstrates the full WINK architecture:
-- MainLoop for production request processing
+- AgentLoop for production request processing
 - EvalLoop for evaluation with session-aware scoring
 - PromptTemplate with multiple sections
 - Feedback providers for soft course correction
@@ -29,10 +29,10 @@ from weakincentives.prompt import PromptTemplate
 from weakincentives.prompt.overrides import LocalPromptOverridesStore, PromptOverridesStore
 from weakincentives.runtime import (
     LoopGroup,
-    MainLoop,
-    MainLoopConfig,
-    MainLoopRequest,
-    MainLoopResult,
+    MainLoop as AgentLoop,
+    MainLoopConfig as AgentLoopConfig,
+    MainLoopRequest as AgentLoopRequest,
+    MainLoopResult as AgentLoopResult,
     Session,
 )
 from weakincentives.runtime.logging import configure_logging
@@ -190,10 +190,10 @@ def build_prompt_template() -> PromptTemplate[TriviaResponse]:
     )
 
 
-class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
+class TriviaAgentLoop(AgentLoop[TriviaRequest, TriviaResponse]):
     """Main processing loop for the trivia agent.
 
-    Extends MainLoop to handle TriviaRequest inputs and produce TriviaResponse
+    Extends AgentLoop to handle TriviaRequest inputs and produce TriviaResponse
     outputs. This loop demonstrates key WINK patterns for production agents:
 
     - **Per-request preparation**: The prepare() method creates a fresh Session
@@ -219,7 +219,7 @@ class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
         >>> loop = TriviaAgentLoop(
         ...     adapter=adapter,
         ...     requests=mailboxes.requests,
-        ...     config=MainLoopConfig(deadline=my_deadline),
+        ...     config=AgentLoopConfig(deadline=my_deadline),
         ...     workspace_dir=Path("./workspace"),
         ... )
         >>> loop.run()  # Process requests until shutdown
@@ -232,8 +232,8 @@ class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
         self,
         *,
         adapter: ProviderAdapter[TriviaResponse],
-        requests: Mailbox[MainLoopRequest[TriviaRequest], MainLoopResult[TriviaResponse]],
-        config: MainLoopConfig | None = None,
+        requests: Mailbox[AgentLoopRequest[TriviaRequest], AgentLoopResult[TriviaResponse]],
+        config: AgentLoopConfig | None = None,
         workspace_dir: Path | None = None,
         overrides_store: PromptOverridesStore | None = None,
     ) -> None:
@@ -247,11 +247,11 @@ class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
             adapter: ProviderAdapter[TriviaResponse] that executes agent sessions.
                 Typically created via create_adapter() with appropriate isolation
                 configuration (skills, sandbox settings, API keys).
-            requests: Mailbox for receiving MainLoopRequest[TriviaRequest] and
-                sending MainLoopResult[TriviaResponse]. Connect this to your
+            requests: Mailbox for receiving AgentLoopRequest[TriviaRequest] and
+                sending AgentLoopResult[TriviaResponse]. Connect this to your
                 message queue (e.g., Redis via TriviaMailboxes).
-            config: Optional MainLoopConfig with deadline and debug bundle settings.
-                If None, uses default MainLoop configuration. Set config.deadline
+            config: Optional AgentLoopConfig with deadline and debug bundle settings.
+                If None, uses default AgentLoop configuration. Set config.deadline
                 to control maximum execution time per request.
             workspace_dir: Path to directory containing files to seed into agent
                 workspace. Defaults to DEFAULT_WORKSPACE_DIR (project's workspace/
@@ -273,7 +273,7 @@ class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
     ) -> tuple[Prompt[TriviaResponse], Session]:
         """Prepare the prompt and session for processing a trivia request.
 
-        Called by the MainLoop for each incoming request. Creates a fresh Session
+        Called by the AgentLoop for each incoming request. Creates a fresh Session
         for isolation, builds the complete PromptTemplate with workspace section,
         binds request parameters, and optionally applies experiment overrides.
 
@@ -406,7 +406,7 @@ def main(
 
     Entry point for running the trivia agent as a long-lived worker process.
     Initializes all dependencies (adapter, mailboxes, loops), then runs both
-    the MainLoop (for production requests) and EvalLoop (for evaluation
+    the AgentLoop (for production requests) and EvalLoop (for evaluation
     requests) concurrently via a LoopGroup.
 
     The worker performs these steps:
@@ -483,9 +483,9 @@ def main(
         err.write(f"Failed to connect to Redis: {e}\n")
         return 1
 
-    # Configure MainLoop with deadline and optional debug bundles
+    # Configure AgentLoop with deadline and optional debug bundles
     default_deadline = Deadline(expires_at=datetime.now(UTC) + DEFAULT_DEADLINE_DURATION)
-    config = MainLoopConfig(
+    config = AgentLoopConfig(
         deadline=default_deadline,
         debug_bundle=(
             BundleConfig(target=settings.debug_bundles_dir) if settings.debug_bundles_dir else None
@@ -497,7 +497,7 @@ def main(
     if settings.prompt_overrides_dir:
         overrides_store = LocalPromptOverridesStore(root_path=settings.prompt_overrides_dir)
 
-    # Create the main loop
+    # Create the agent loop
     loop = TriviaAgentLoop(
         adapter=adapter,
         requests=mailboxes.requests,

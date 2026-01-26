@@ -56,7 +56,7 @@ starter/
 │       └── SKILL.md
 ├── src/
 │   └── trivia_agent/
-│       ├── worker.py       # MainLoop entry point
+│       ├── worker.py       # AgentLoop entry point
 │       ├── eval_loop.py    # EvalLoop factory
 │       ├── dispatch.py     # Submit questions to the agent
 │       ├── models.py       # Request/Response dataclasses
@@ -326,7 +326,7 @@ make format            # Format code
                     ┌────────────┴────────────┐
                     ▼                         ▼
 ┌────────────────────────────┐  ┌────────────────────────────┐
-│        MainLoop            │  │        EvalLoop            │
+│        AgentLoop           │  │        EvalLoop            │
 │   (production requests)    │  │   (evaluation samples)     │
 └─────────────┬──────────────┘  └─────────────┬──────────────┘
               │                               │

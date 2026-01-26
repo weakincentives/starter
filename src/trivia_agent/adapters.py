@@ -13,7 +13,7 @@ The default model is Claude Sonnet, accessed via the "sonnet" alias.
 Usage:
     >>> from trivia_agent.adapters import create_adapter
     >>> adapter = create_adapter()
-    >>> # Pass adapter to MainLoop.create() or EvalLoop.create()
+    >>> # Pass adapter to AgentLoop.create() or EvalLoop.create()
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ def create_adapter(
     Factory function that assembles all components needed to run the trivia
     agent: model selection, task completion checking, isolation configuration,
     and working directory setup. The returned adapter is ready to be passed
-    to a WINK MainLoop or EvalLoop.
+    to a WINK AgentLoop or EvalLoop.
 
     The adapter is configured with:
         - Model: Claude Sonnet (via the "sonnet" alias)
@@ -109,15 +109,15 @@ def create_adapter(
     Returns:
         ClaudeAgentSDKAdapter[TriviaResponse]: A fully configured adapter
             instance typed to produce TriviaResponse structured output.
-            Pass this adapter to ``MainLoop.create()`` or ``EvalLoop.create()``
+            Pass this adapter to ``AgentLoop.create()`` or ``EvalLoop.create()``
             to run the trivia agent.
 
     Example:
         >>> from trivia_agent.isolation import create_isolation_config
         >>> isolation = create_isolation_config()
         >>> adapter = create_adapter(isolation=isolation, cwd="/path/to/workspace")
-        >>> # Use adapter with MainLoop
-        >>> loop = MainLoop.create(adapter=adapter, sections=[...])
+        >>> # Use adapter with AgentLoop
+        >>> loop = AgentLoop.create(adapter=adapter, sections=[...])
     """
     checker = SimpleTaskCompletionChecker()
     client_config = ClaudeAgentSDKClientConfig(
