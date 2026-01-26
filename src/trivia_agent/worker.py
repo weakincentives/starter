@@ -14,13 +14,13 @@ from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
-from weakincentives import FrozenDataclass, Prompt
+from weakincentives import Budget, FrozenDataclass, Prompt, PromptResponse
 from weakincentives.adapters import ProviderAdapter
 from weakincentives.adapters.claude_agent_sdk import ClaudeAgentWorkspaceSection, HostMount
 from weakincentives.deadlines import Deadline
@@ -28,6 +28,7 @@ from weakincentives.debug.bundle import BundleConfig
 from weakincentives.prompt import PromptTemplate
 from weakincentives.prompt.overrides import LocalPromptOverridesStore, PromptOverridesStore
 from weakincentives.runtime import (
+    Heartbeat,
     LoopGroup,
     MainLoop,
     MainLoopConfig,
@@ -204,6 +205,10 @@ class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
       customization of prompt content without code changes
     - **Evaluation integration**: Compatible with EvalLoop for running
       evaluations with session-aware scoring
+    - **Request preprocessing**: Override preprocess_request() to transform
+      requests before agent processing
+    - **Response postprocessing**: Override postprocess_response() to transform
+      responses before returning to callers
 
     To use this loop, instantiate it with an adapter and mailbox, then either:
     1. Call run() directly for single-threaded processing
@@ -265,6 +270,34 @@ class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
         self._base_template = build_prompt_template()
         self._overrides_store = overrides_store
 
+    def preprocess_request(self, request: TriviaRequest) -> TriviaRequest:
+        """Transform request before agent processing.
+
+        Override this method in subclasses to implement custom preprocessing
+        logic such as validation, normalization, or enrichment.
+
+        Args:
+            request: The incoming TriviaRequest.
+
+        Returns:
+            TriviaRequest: The preprocessed request.
+        """
+        return request
+
+    def postprocess_response(self, response: TriviaResponse) -> TriviaResponse:
+        """Transform response before returning to caller.
+
+        Override this method in subclasses to implement custom postprocessing
+        logic such as formatting, cleanup, or validation.
+
+        Args:
+            response: The TriviaResponse from the agent.
+
+        Returns:
+            TriviaResponse: The postprocessed response.
+        """
+        return response
+
     def prepare(
         self,
         request: TriviaRequest,
@@ -276,6 +309,10 @@ class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
         Called by the MainLoop for each incoming request. Creates a fresh Session
         for isolation, builds the complete PromptTemplate with workspace section,
         binds request parameters, and optionally applies experiment overrides.
+
+        Note: Request preprocessing is applied in the execute() method before
+        prepare() is called. This ensures the preprocessed request is used
+        consistently throughout the execution flow.
 
         This method demonstrates key WINK patterns:
 
@@ -347,6 +384,53 @@ class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
         prompt.bind(EmptyParams())  # For sections without params (GameRules, Hints)
 
         return prompt, session
+
+    def execute(
+        self,
+        request: TriviaRequest,
+        *,
+        budget: Budget | None = None,
+        deadline: Deadline | None = None,
+        resources: Mapping[type[object], object] | None = None,
+        heartbeat: Heartbeat | None = None,
+        experiment: Experiment | None = None,
+    ) -> tuple[PromptResponse[TriviaResponse], Session]:
+        """Execute a trivia request with preprocessing and postprocessing.
+
+        Overrides the parent MainLoop.execute() to apply preprocess_request()
+        before execution and postprocess_response() after execution.
+
+        Args:
+            request: TriviaRequest containing the question to process.
+            budget: Optional Budget for token/cost limits.
+            deadline: Optional Deadline for time limits.
+            resources: Optional mapping of resource types to instances.
+            heartbeat: Optional Heartbeat for progress reporting.
+            experiment: Optional Experiment for evaluation runs.
+
+        Returns:
+            tuple[PromptResponse[TriviaResponse], Session]: Response and session.
+        """
+        # Apply preprocessing to the request
+        preprocessed_request = self.preprocess_request(request)
+
+        # Execute with the preprocessed request
+        prompt_response, session = super().execute(
+            preprocessed_request,
+            budget=budget,
+            deadline=deadline,
+            resources=resources,
+            heartbeat=heartbeat,
+            experiment=experiment,
+        )
+
+        # Apply postprocessing to the response output (if present)
+        output = prompt_response.output
+        if output is not None:
+            postprocessed_output = self.postprocess_response(output)
+            return prompt_response.update(output=postprocessed_output), session  # type: ignore[return-value]
+
+        return prompt_response, session
 
 
 @FrozenDataclass()

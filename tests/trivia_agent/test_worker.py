@@ -238,6 +238,189 @@ class TestTriviaAgentLoop:
         assert call_args.kwargs.get("tag") == "latest"
 
 
+class TestTriviaAgentLoopPreprocessing:
+    """Tests for TriviaAgentLoop.preprocess_request() method."""
+
+    def test_preprocess_request_returns_unchanged_by_default(
+        self,
+        fake_mailboxes: TriviaMailboxes,
+    ) -> None:
+        """Test that preprocess_request returns request unchanged by default."""
+        mock_adapter: ProviderAdapter[TriviaResponse] = MagicMock()
+
+        loop = TriviaAgentLoop(
+            adapter=mock_adapter,
+            requests=fake_mailboxes.requests,
+        )
+
+        request = TriviaRequest(question="test question")
+        result = loop.preprocess_request(request)
+
+        assert result is request
+
+    def test_preprocess_request_can_be_overridden(
+        self,
+        fake_mailboxes: TriviaMailboxes,
+    ) -> None:
+        """Test that preprocess_request can be overridden in subclass."""
+
+        class CustomLoop(TriviaAgentLoop):
+            def preprocess_request(self, request: TriviaRequest) -> TriviaRequest:
+                return TriviaRequest(question=request.question.upper())
+
+        mock_adapter: ProviderAdapter[TriviaResponse] = MagicMock()
+
+        loop = CustomLoop(
+            adapter=mock_adapter,
+            requests=fake_mailboxes.requests,
+        )
+
+        request = TriviaRequest(question="hello world")
+        result = loop.preprocess_request(request)
+
+        assert result.question == "HELLO WORLD"
+
+
+class TestTriviaAgentLoopPostprocessing:
+    """Tests for TriviaAgentLoop.postprocess_response() method."""
+
+    def test_postprocess_response_returns_unchanged_by_default(
+        self,
+        fake_mailboxes: TriviaMailboxes,
+    ) -> None:
+        """Test that postprocess_response returns response unchanged by default."""
+        mock_adapter: ProviderAdapter[TriviaResponse] = MagicMock()
+
+        loop = TriviaAgentLoop(
+            adapter=mock_adapter,
+            requests=fake_mailboxes.requests,
+        )
+
+        response = TriviaResponse(answer="42")
+        result = loop.postprocess_response(response)
+
+        assert result is response
+
+    def test_postprocess_response_can_be_overridden(
+        self,
+        fake_mailboxes: TriviaMailboxes,
+    ) -> None:
+        """Test that postprocess_response can be overridden in subclass."""
+
+        class CustomLoop(TriviaAgentLoop):
+            def postprocess_response(self, response: TriviaResponse) -> TriviaResponse:
+                return TriviaResponse(answer=f"Answer: {response.answer}")
+
+        mock_adapter: ProviderAdapter[TriviaResponse] = MagicMock()
+
+        loop = CustomLoop(
+            adapter=mock_adapter,
+            requests=fake_mailboxes.requests,
+        )
+
+        response = TriviaResponse(answer="42")
+        result = loop.postprocess_response(response)
+
+        assert result.answer == "Answer: 42"
+
+
+class TestTriviaAgentLoopExecute:
+    """Tests for TriviaAgentLoop.execute() with preprocessing/postprocessing."""
+
+    def test_execute_calls_preprocess_request(
+        self,
+        fake_mailboxes: TriviaMailboxes,
+    ) -> None:
+        """Test that execute() calls preprocess_request."""
+        from weakincentives.runtime import MainLoop
+
+        class CustomLoop(TriviaAgentLoop):
+            def preprocess_request(self, request: TriviaRequest) -> TriviaRequest:
+                return TriviaRequest(question=request.question.strip())
+
+        mock_adapter: ProviderAdapter[TriviaResponse] = MagicMock()
+
+        loop = CustomLoop(
+            adapter=mock_adapter,
+            requests=fake_mailboxes.requests,
+        )
+
+        mock_response = MagicMock()
+        mock_response.output = TriviaResponse(answer="42")
+        mock_session = MagicMock()
+
+        captured_requests: list[TriviaRequest] = []
+
+        def capture_execute(self_arg, request, **kwargs):
+            captured_requests.append(request)
+            return (mock_response, mock_session)
+
+        with patch.object(MainLoop, "execute", capture_execute):
+            request = TriviaRequest(question="  What is the answer?  ")
+            loop.execute(request)
+
+            assert len(captured_requests) == 1
+            assert captured_requests[0].question == "What is the answer?"
+
+    def test_execute_calls_postprocess_response(
+        self,
+        fake_mailboxes: TriviaMailboxes,
+    ) -> None:
+        """Test that execute() calls postprocess_response."""
+        from weakincentives.runtime import MainLoop
+
+        class CustomLoop(TriviaAgentLoop):
+            def postprocess_response(self, response: TriviaResponse) -> TriviaResponse:
+                return TriviaResponse(answer=response.answer.strip())
+
+        mock_adapter: ProviderAdapter[TriviaResponse] = MagicMock()
+
+        loop = CustomLoop(
+            adapter=mock_adapter,
+            requests=fake_mailboxes.requests,
+        )
+
+        mock_response = MagicMock()
+        mock_response.output = TriviaResponse(answer="  42  ")
+        mock_response.update = MagicMock(return_value=mock_response)
+        mock_session = MagicMock()
+
+        with patch.object(MainLoop, "execute", return_value=(mock_response, mock_session)):
+            request = TriviaRequest(question="What is the answer?")
+            loop.execute(request)
+
+            mock_response.update.assert_called_once()
+            call_kwargs = mock_response.update.call_args.kwargs
+            assert call_kwargs["output"].answer == "42"
+
+    def test_execute_skips_postprocessing_when_output_is_none(
+        self,
+        fake_mailboxes: TriviaMailboxes,
+    ) -> None:
+        """Test that execute() skips postprocessing when output is None."""
+        from weakincentives.runtime import MainLoop
+
+        mock_adapter: ProviderAdapter[TriviaResponse] = MagicMock()
+
+        loop = TriviaAgentLoop(
+            adapter=mock_adapter,
+            requests=fake_mailboxes.requests,
+        )
+
+        mock_response = MagicMock()
+        mock_response.output = None
+        mock_response.update = MagicMock()
+        mock_session = MagicMock()
+
+        with patch.object(MainLoop, "execute", return_value=(mock_response, mock_session)):
+            request = TriviaRequest(question="What is the answer?")
+            result_response, result_session = loop.execute(request)
+
+            mock_response.update.assert_not_called()
+            assert result_response is mock_response
+            assert result_session is mock_session
+
+
 class TestTriviaRuntime:
     """Tests for TriviaRuntime dataclass."""
 
