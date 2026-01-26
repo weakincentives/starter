@@ -1,18 +1,19 @@
 """Prompt sections for the trivia agent.
 
 This module provides reusable prompt sections that compose the trivia agent's
-system prompt. Each section encapsulates related content and tools, enabling
+system prompt. Each section is created via a factory function, enabling
 modular prompt construction.
 
 Key WINK features demonstrated:
-    - **Custom sections with typed parameters**: QuestionSection uses QuestionParams
-      to inject the player's question into the prompt template.
-    - **Progressive disclosure**: GameRulesSection starts collapsed (SUMMARY visibility)
-      and expands when the agent calls read_section('rules').
-    - **Tools attached to sections**: HintsSection bundles the hint_lookup tool, so
-      it's only available when the hints section is included.
-    - **Tool policies**: LuckyDiceSection uses SequentialDependencyPolicy to enforce
-      that pick_up_dice must be called before throw_dice.
+    - **Custom sections with typed parameters**: build_question_section() creates
+      a section that uses QuestionParams to inject the player's question.
+    - **Progressive disclosure**: build_game_rules_section() creates a section that
+      starts collapsed (SUMMARY visibility) and expands when the agent calls
+      read_section('rules').
+    - **Tools attached to sections**: build_hints_section() bundles the hint_lookup
+      tool, so it's only available when the hints section is included.
+    - **Tool policies**: build_lucky_dice_section() uses SequentialDependencyPolicy
+      to enforce that pick_up_dice must be called before throw_dice.
     - **Task examples**: build_task_examples_section() provides multi-step workflow
       demonstrations for proper tool sequencing.
 
@@ -20,19 +21,19 @@ Usage:
     To build a prompt with these sections, include them in a PromptTemplate::
 
         from trivia_agent.sections import (
-            QuestionSection,
-            GameRulesSection,
-            HintsSection,
-            LuckyDiceSection,
+            build_question_section,
+            build_game_rules_section,
+            build_hints_section,
+            build_lucky_dice_section,
             build_task_examples_section,
         )
 
         template = PromptTemplate(
             sections=[
-                QuestionSection(),
-                GameRulesSection(),
-                HintsSection(),
-                LuckyDiceSection(),
+                build_question_section(),
+                build_game_rules_section(),
+                build_hints_section(),
+                build_lucky_dice_section(),
                 build_task_examples_section(),
             ]
         )
@@ -128,23 +129,24 @@ class EmptyParams:
 # =============================================================================
 
 
-class QuestionSection(MarkdownSection[QuestionParams]):
-    """Section that displays the player's trivia question.
+def build_question_section() -> MarkdownSection[QuestionParams]:
+    """Build a section that displays the player's trivia question.
 
-    This section renders the current question being asked by the player. It uses
-    a simple template with a single ${question} placeholder that gets replaced
-    with the actual question text from QuestionParams.
+    Creates a MarkdownSection that renders the current question being asked by
+    the player. It uses a simple template with a single ${question} placeholder
+    that gets replaced with the actual question text from QuestionParams.
 
     The section is registered under the key "question", so parameters should be
     passed as {"question": QuestionParams(question="...")}.
 
-    Attributes:
-        _params_type: QuestionParams - the parameter type for this section.
+    Returns:
+        MarkdownSection[QuestionParams]: A configured section ready to be included
+            in a PromptTemplate. The section key is "question".
 
     Example:
         Include in a prompt template::
 
-            template = PromptTemplate(sections=[QuestionSection(), ...])
+            template = PromptTemplate(sections=[build_question_section(), ...])
 
         Render with a specific question::
 
@@ -156,32 +158,30 @@ class QuestionSection(MarkdownSection[QuestionParams]):
         The default_params provides an empty question string, so the section can
         render even without explicit parameters (useful for template validation).
     """
-
-    _params_type = QuestionParams
-
-    def __init__(self) -> None:
-        super().__init__(
-            title="Question",
-            key="question",
-            template="${question}",
-            default_params=QuestionParams(question=""),
-        )
+    return MarkdownSection[QuestionParams](
+        title="Question",
+        key="question",
+        template="${question}",
+        default_params=QuestionParams(question=""),
+    )
 
 
-class GameRulesSection(MarkdownSection[EmptyParams]):
-    """Game rules section demonstrating progressive disclosure.
+def build_game_rules_section() -> MarkdownSection[EmptyParams]:
+    """Build a game rules section demonstrating progressive disclosure.
 
-    This section contains the complete rules for the secret trivia game but starts
-    in SUMMARY visibility mode. The agent initially sees only a brief summary hint
-    and can expand the full content by calling read_section('rules').
+    Creates a MarkdownSection containing the complete rules for the secret trivia
+    game. The section starts in SUMMARY visibility mode, so the agent initially
+    sees only a brief summary hint and can expand the full content by calling
+    read_section('rules').
 
     Progressive disclosure is useful for:
         - Reducing initial prompt size and token usage
         - Letting the agent decide when it needs detailed information
         - Keeping the main prompt focused on the immediate task
 
-    Attributes:
-        _params_type: EmptyParams - this section has no dynamic content.
+    Returns:
+        MarkdownSection[EmptyParams]: A configured section ready to be included
+            in a PromptTemplate. The section key is "rules".
 
     Section key: "rules"
 
@@ -191,8 +191,8 @@ class GameRulesSection(MarkdownSection[EmptyParams]):
         Add to a prompt template for on-demand rules access::
 
             template = PromptTemplate(sections=[
-                QuestionSection(),
-                GameRulesSection(),  # Shows summary until agent expands
+                build_question_section(),
+                build_game_rules_section(),  # Shows summary until agent expands
             ])
 
         The agent sees in the prompt::
@@ -207,14 +207,10 @@ class GameRulesSection(MarkdownSection[EmptyParams]):
         The rules explain the four secret categories (number, word, color, phrase)
         and instruct the agent to give concise answers from its skill knowledge.
     """
-
-    _params_type = EmptyParams
-
-    def __init__(self) -> None:
-        super().__init__(
-            title="Game Rules",
-            key="rules",
-            template="""## Secret Trivia Game Rules
+    return MarkdownSection[EmptyParams](
+        title="Game Rules",
+        key="rules",
+        template="""## Secret Trivia Game Rules
 
 You are the host of a secret trivia game. Your job is to answer trivia questions
 using secret knowledge that only you possess.
@@ -239,29 +235,30 @@ using secret knowledge that only you possess.
 - The secrets are in your skill knowledge - trust what you know
 - If asked about something that's not a secret, say you don't know
 """,
-            summary=(
-                "Game rules available. Use read_section('rules') to review "
-                "how the secret trivia game works."
-            ),
-            visibility=SectionVisibility.SUMMARY,
-            default_params=EmptyParams(),
-        )
+        summary=(
+            "Game rules available. Use read_section('rules') to review "
+            "how the secret trivia game works."
+        ),
+        visibility=SectionVisibility.SUMMARY,
+        default_params=EmptyParams(),
+    )
 
 
-class HintsSection(MarkdownSection[EmptyParams]):
-    """Hints section that bundles the hint_lookup tool.
+def build_hints_section() -> MarkdownSection[EmptyParams]:
+    """Build a hints section that bundles the hint_lookup tool.
 
-    This section demonstrates attaching tools to sections. When this section is
-    included in a prompt template, the hint_lookup tool automatically becomes
-    available to the agent. This pattern keeps tools co-located with their
-    documentation and usage instructions.
+    Creates a MarkdownSection that demonstrates attaching tools to sections.
+    When this section is included in a prompt template, the hint_lookup tool
+    automatically becomes available to the agent. This pattern keeps tools
+    co-located with their documentation and usage instructions.
 
     The hint_lookup tool allows the agent to retrieve hints for each secret
     category without revealing the actual answer. Available categories are:
     number, word, color, and phrase.
 
-    Attributes:
-        _params_type: EmptyParams - this section has no dynamic content.
+    Returns:
+        MarkdownSection[EmptyParams]: A configured section ready to be included
+            in a PromptTemplate. The section key is "hints".
 
     Section key: "hints"
 
@@ -274,8 +271,8 @@ class HintsSection(MarkdownSection[EmptyParams]):
         Include to enable hint functionality::
 
             template = PromptTemplate(sections=[
-                QuestionSection(),
-                HintsSection(),  # Adds hint_lookup tool to available tools
+                build_question_section(),
+                build_hints_section(),  # Adds hint_lookup tool to available tools
             ])
 
         The agent can then call hint_lookup to help stuck players::
@@ -285,43 +282,40 @@ class HintsSection(MarkdownSection[EmptyParams]):
 
     Note:
         Tools attached to sections are only available when the section is part
-        of the active prompt. Remove HintsSection to disable hint functionality.
+        of the active prompt. Remove the hints section to disable hint functionality.
     """
-
-    _params_type = EmptyParams
-
-    def __init__(self) -> None:
-        super().__init__(
-            title="Hints",
-            key="hints",
-            template="""## Hint System
+    return MarkdownSection[EmptyParams](
+        title="Hints",
+        key="hints",
+        template="""## Hint System
 
 If a player is stuck, you can provide hints using the hint_lookup tool.
 Hints give clues without revealing the actual answer.
 
 Available hint categories: number, word, color, phrase
 """,
-            visibility=SectionVisibility.FULL,
-            tools=(hint_lookup_tool,),
-            default_params=EmptyParams(),
-        )
+        visibility=SectionVisibility.FULL,
+        tools=(hint_lookup_tool,),
+        default_params=EmptyParams(),
+    )
 
 
-class LuckyDiceSection(MarkdownSection[EmptyParams]):
-    """Lucky Dice mini-game section demonstrating tool policies.
+def build_lucky_dice_section() -> MarkdownSection[EmptyParams]:
+    """Build a Lucky Dice mini-game section demonstrating tool policies.
 
-    This section showcases SequentialDependencyPolicy, which enforces tool call
-    ordering. The throw_dice tool cannot be called until pick_up_dice has been
-    called first. If the agent tries to throw without picking up, the policy
-    blocks the call and returns an error message.
+    Creates a MarkdownSection that showcases SequentialDependencyPolicy, which
+    enforces tool call ordering. The throw_dice tool cannot be called until
+    pick_up_dice has been called first. If the agent tries to throw without
+    picking up, the policy blocks the call and returns an error message.
 
     Tool policies are useful for:
         - Enforcing proper operation sequences (e.g., connect before query)
         - Preventing invalid state transitions
         - Teaching agents correct workflows through guardrails
 
-    Attributes:
-        _params_type: EmptyParams - this section has no dynamic content.
+    Returns:
+        MarkdownSection[EmptyParams]: A configured section ready to be included
+            in a PromptTemplate. The section key is "dice".
 
     Section key: "dice"
 
@@ -339,8 +333,8 @@ class LuckyDiceSection(MarkdownSection[EmptyParams]):
         Include to enable the dice mini-game::
 
             template = PromptTemplate(sections=[
-                QuestionSection(),
-                LuckyDiceSection(),  # Adds dice tools with ordering policy
+                build_question_section(),
+                build_lucky_dice_section(),  # Adds dice tools with ordering policy
             ])
 
         Correct tool sequence::
@@ -360,21 +354,17 @@ class LuckyDiceSection(MarkdownSection[EmptyParams]):
         The policy state resets between agent sessions. Each new session
         requires pick_up_dice to be called before throw_dice.
     """
+    # Policy: throw_dice requires pick_up_dice to have been called first
+    dice_policy = SequentialDependencyPolicy(
+        dependencies={
+            "throw_dice": frozenset({"pick_up_dice"}),
+        }
+    )
 
-    _params_type = EmptyParams
-
-    def __init__(self) -> None:
-        # Policy: throw_dice requires pick_up_dice to have been called first
-        dice_policy = SequentialDependencyPolicy(
-            dependencies={
-                "throw_dice": frozenset({"pick_up_dice"}),
-            }
-        )
-
-        super().__init__(
-            title="Lucky Dice",
-            key="dice",
-            template="""## Lucky Dice Mini-Game
+    return MarkdownSection[EmptyParams](
+        title="Lucky Dice",
+        key="dice",
+        template="""## Lucky Dice Mini-Game
 
 Players can roll the lucky dice for bonus points! But there's a rule:
 you must pick up the dice before you can throw it.
@@ -386,11 +376,11 @@ you must pick up the dice before you can throw it.
 The throw_dice tool has a policy that enforces this ordering.
 If someone asks to roll the dice, make sure to pick it up first!
 """,
-            visibility=SectionVisibility.FULL,
-            tools=(pick_up_dice_tool, throw_dice_tool),
-            policies=(dice_policy,),
-            default_params=EmptyParams(),
-        )
+        visibility=SectionVisibility.FULL,
+        tools=(pick_up_dice_tool, throw_dice_tool),
+        policies=(dice_policy,),
+        default_params=EmptyParams(),
+    )
 
 
 # =============================================================================

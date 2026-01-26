@@ -2,11 +2,11 @@
 
 from trivia_agent.sections import (
     EmptyParams,
-    GameRulesSection,
-    HintsSection,
-    LuckyDiceSection,
     QuestionParams,
-    QuestionSection,
+    build_game_rules_section,
+    build_hints_section,
+    build_lucky_dice_section,
+    build_question_section,
 )
 
 
@@ -28,85 +28,85 @@ class TestEmptyParams:
         assert params is not None
 
 
-class TestQuestionSection:
-    """Tests for QuestionSection."""
+class TestBuildQuestionSection:
+    """Tests for build_question_section."""
 
     def test_has_correct_key(self) -> None:
         """Test section has correct key."""
-        section = QuestionSection()
+        section = build_question_section()
         assert section.key == "question"
 
     def test_has_correct_title(self) -> None:
         """Test section has correct title."""
-        section = QuestionSection()
+        section = build_question_section()
         assert section.title == "Question"
 
     def test_section_type(self) -> None:
         """Test section is a MarkdownSection."""
         from weakincentives import MarkdownSection
 
-        section = QuestionSection()
+        section = build_question_section()
         assert isinstance(section, MarkdownSection)
 
 
-class TestGameRulesSection:
-    """Tests for GameRulesSection with progressive disclosure."""
+class TestBuildGameRulesSection:
+    """Tests for build_game_rules_section with progressive disclosure."""
 
     def test_has_correct_key(self) -> None:
         """Test section has correct key."""
-        section = GameRulesSection()
+        section = build_game_rules_section()
         assert section.key == "rules"
 
     def test_has_correct_title(self) -> None:
         """Test section has correct title."""
-        section = GameRulesSection()
+        section = build_game_rules_section()
         assert section.title == "Game Rules"
 
     def test_section_type(self) -> None:
         """Test section is a MarkdownSection."""
         from weakincentives import MarkdownSection
 
-        section = GameRulesSection()
+        section = build_game_rules_section()
         assert isinstance(section, MarkdownSection)
 
 
-class TestHintsSection:
-    """Tests for HintsSection with attached tool."""
+class TestBuildHintsSection:
+    """Tests for build_hints_section with attached tool."""
 
     def test_has_correct_key(self) -> None:
         """Test section has correct key."""
-        section = HintsSection()
+        section = build_hints_section()
         assert section.key == "hints"
 
     def test_has_correct_title(self) -> None:
         """Test section has correct title."""
-        section = HintsSection()
+        section = build_hints_section()
         assert section.title == "Hints"
 
     def test_section_type(self) -> None:
         """Test section is a MarkdownSection."""
         from weakincentives import MarkdownSection
 
-        section = HintsSection()
+        section = build_hints_section()
         assert isinstance(section, MarkdownSection)
 
 
-class TestLuckyDiceSection:
-    """Tests for LuckyDiceSection with tool policy."""
+class TestBuildLuckyDiceSection:
+    """Tests for build_lucky_dice_section with tool policy."""
 
     def test_has_correct_key(self) -> None:
         """Test section has correct key."""
-        section = LuckyDiceSection()
+        section = build_lucky_dice_section()
         assert section.key == "dice"
 
     def test_has_correct_title(self) -> None:
         """Test section has correct title."""
-        section = LuckyDiceSection()
+        section = build_lucky_dice_section()
         assert section.title == "Lucky Dice"
 
     def test_section_type(self) -> None:
         """Test section is a MarkdownSection."""
         from weakincentives import MarkdownSection
 
-        section = LuckyDiceSection()
+        section = build_lucky_dice_section()
         assert isinstance(section, MarkdownSection)
