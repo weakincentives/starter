@@ -46,12 +46,12 @@ from trivia_agent.mailboxes import TriviaMailboxes, create_mailboxes
 from trivia_agent.models import TriviaRequest, TriviaResponse
 from trivia_agent.sections import (
     EmptyParams,
-    GameRulesSection,
-    HintsSection,
-    LuckyDiceSection,
     QuestionParams,
-    QuestionSection,
-    build_task_examples_section,  # type: ignore[attr-defined]
+    build_game_rules_section,
+    build_hints_section,
+    build_lucky_dice_section,
+    build_question_section,
+    build_task_examples_section,  # pyright: ignore[reportUnknownVariableType]
 )
 
 if TYPE_CHECKING:
@@ -180,10 +180,10 @@ def build_prompt_template() -> PromptTemplate[TriviaResponse]:
         ns="trivia",
         key="main",
         sections=[  # type: ignore[list-item]
-            QuestionSection(),
-            GameRulesSection(),  # Progressive disclosure - starts summarized
-            HintsSection(),  # Has attached hint_lookup tool
-            LuckyDiceSection(),  # Lucky Dice mini-game with policy enforcement
+            build_question_section(),
+            build_game_rules_section(),  # Progressive disclosure - starts summarized
+            build_hints_section(),  # Has attached hint_lookup tool
+            build_lucky_dice_section(),  # Lucky Dice mini-game with policy enforcement
             build_task_examples_section(),  # Multi-step workflow examples
         ],
         feedback_providers=build_feedback_providers(),
@@ -318,10 +318,10 @@ class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
             ns="trivia",
             key="main",
             sections=[  # type: ignore[list-item]
-                QuestionSection(),
-                GameRulesSection(),
-                HintsSection(),
-                LuckyDiceSection(),  # Lucky Dice mini-game with policy enforcement
+                build_question_section(),
+                build_game_rules_section(),
+                build_hints_section(),
+                build_lucky_dice_section(),  # Lucky Dice mini-game with policy enforcement
                 build_task_examples_section(),  # Multi-step workflow examples
                 workspace_section,  # Session-bound workspace access
             ],

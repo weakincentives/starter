@@ -13,7 +13,7 @@ import pytest
 from trivia_agent.config import RedisSettings
 from trivia_agent.mailboxes import TriviaMailboxes, create_mailboxes
 from trivia_agent.models import TriviaRequest, TriviaResponse
-from trivia_agent.sections import QuestionParams, QuestionSection
+from trivia_agent.sections import QuestionParams, build_question_section
 from trivia_agent.worker import (
     TriviaAgentLoop,
     TriviaRuntime,
@@ -127,17 +127,17 @@ class TestCreateWorkspaceSection:
         assert len(result._mounts) == 2
 
 
-class TestQuestionSection:
-    """Tests for QuestionSection."""
+class TestBuildQuestionSection:
+    """Tests for build_question_section."""
 
     def test_section_has_correct_key(self) -> None:
         """Test that section has the correct key."""
-        section = QuestionSection()
+        section = build_question_section()
         assert section.key == "question"
 
     def test_section_has_correct_title(self) -> None:
         """Test that section has the correct title."""
-        section = QuestionSection()
+        section = build_question_section()
         assert section.title == "Question"
 
 
