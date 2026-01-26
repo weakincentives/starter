@@ -269,29 +269,45 @@ class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
         self._workspace_dir = workspace_dir or DEFAULT_WORKSPACE_DIR
         self._base_template = build_prompt_template()
         self._overrides_store = overrides_store
+        self._last_prompt: Prompt[TriviaResponse] | None = None
+        self._last_session: Session | None = None
 
-    def preprocess_request(self, request: TriviaRequest) -> TriviaRequest:
+    def preprocess_request(
+        self,
+        request: TriviaRequest,
+        session: Session,
+    ) -> TriviaRequest:
         """Transform request before agent processing.
 
         Override this method in subclasses to implement custom preprocessing
-        logic such as validation, normalization, or enrichment.
+        logic such as validation, normalization, or enrichment. Has access to
+        the session for context-aware preprocessing.
 
         Args:
             request: The incoming TriviaRequest.
+            session: The session for this execution.
 
         Returns:
             TriviaRequest: The preprocessed request.
         """
         return request
 
-    def postprocess_response(self, response: TriviaResponse) -> TriviaResponse:
+    def postprocess_response(
+        self,
+        response: TriviaResponse,
+        prompt: Prompt[TriviaResponse],
+        session: Session,
+    ) -> TriviaResponse:
         """Transform response before returning to caller.
 
         Override this method in subclasses to implement custom postprocessing
-        logic such as formatting, cleanup, or validation.
+        logic such as formatting, cleanup, or validation. Has access to the
+        prompt and session for context-aware postprocessing.
 
         Args:
             response: The TriviaResponse from the agent.
+            prompt: The prompt used for this execution.
+            session: The session used for this execution.
 
         Returns:
             TriviaResponse: The postprocessed response.
@@ -310,37 +326,19 @@ class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
         for isolation, builds the complete PromptTemplate with workspace section,
         binds request parameters, and optionally applies experiment overrides.
 
-        Note: Request preprocessing is applied in the execute() method before
-        prepare() is called. This ensures the preprocessed request is used
-        consistently throughout the execution flow.
-
-        This method demonstrates key WINK patterns:
-
-        - **Session per request**: Each request gets its own Session for proper
-          isolation between concurrent requests
-        - **Dynamic workspace section**: ClaudeAgentWorkspaceSection is created
-          here (not in build_prompt_template) because it needs the Session
-        - **Parameter binding**: Binds QuestionParams with the user's question
-          and EmptyParams for parameterless sections
-        - **Experiment support**: Uses experiment.overrides_tag to select prompt
-          variants for A/B testing; defaults to "latest"
-        - **Override seeding**: Automatically seeds the overrides store with
-          current prompt state, creating editable files for customization
+        Calls preprocess_request() to allow request transformation before binding.
 
         Args:
-            request: TriviaRequest containing the question field. The question
-                is bound to QuestionSection via QuestionParams.
-            experiment: Optional Experiment instance for evaluation runs. When
-                provided, uses experiment.overrides_tag to select prompt variant.
-                Pass None for production requests.
+            request: TriviaRequest containing the question field.
+            experiment: Optional Experiment instance for evaluation runs.
 
         Returns:
-            tuple[Prompt[TriviaResponse], Session]: A 2-tuple containing:
-                - Prompt: Fully configured prompt with all sections and bound
-                  parameters, ready for adapter.run()
-                - Session: Fresh session instance for this request's execution
+            tuple[Prompt[TriviaResponse], Session]: Prompt and session for execution.
         """
         session = Session()
+
+        # Allow subclasses to preprocess the request
+        request = self.preprocess_request(request, session)
 
         # Create workspace section with seeded files
         # This needs to be per-request because it references the session
@@ -383,6 +381,10 @@ class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
         prompt.bind(QuestionParams(question=request.question))
         prompt.bind(EmptyParams())  # For sections without params (GameRules, Hints)
 
+        # Store for postprocess_response access
+        self._last_prompt = prompt
+        self._last_session = session
+
         return prompt, session
 
     def execute(
@@ -397,8 +399,8 @@ class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
     ) -> tuple[PromptResponse[TriviaResponse], Session]:
         """Execute a trivia request with preprocessing and postprocessing.
 
-        Overrides the parent MainLoop.execute() to apply preprocess_request()
-        before execution and postprocess_response() after execution.
+        Preprocessing happens in prepare() via preprocess_request().
+        Postprocessing happens after execution via postprocess_response().
 
         Args:
             request: TriviaRequest containing the question to process.
@@ -411,12 +413,9 @@ class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
         Returns:
             tuple[PromptResponse[TriviaResponse], Session]: Response and session.
         """
-        # Apply preprocessing to the request
-        preprocessed_request = self.preprocess_request(request)
-
-        # Execute with the preprocessed request
+        # Execute (prepare() is called internally by parent, which calls preprocess_request)
         prompt_response, session = super().execute(
-            preprocessed_request,
+            request,
             budget=budget,
             deadline=deadline,
             resources=resources,
@@ -426,8 +425,10 @@ class TriviaAgentLoop(MainLoop[TriviaRequest, TriviaResponse]):
 
         # Apply postprocessing to the response output (if present)
         output = prompt_response.output
-        if output is not None:
-            postprocessed_output = self.postprocess_response(output)
+        if output is not None and self._last_prompt is not None:
+            postprocessed_output = self.postprocess_response(
+                output, self._last_prompt, self._last_session or session
+            )
             return prompt_response.update(output=postprocessed_output), session  # type: ignore[return-value]
 
         return prompt_response, session

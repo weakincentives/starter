@@ -246,6 +246,8 @@ class TestTriviaAgentLoopPreprocessing:
         fake_mailboxes: TriviaMailboxes,
     ) -> None:
         """Test that preprocess_request returns request unchanged by default."""
+        from weakincentives.runtime import Session
+
         mock_adapter: ProviderAdapter[TriviaResponse] = MagicMock()
 
         loop = TriviaAgentLoop(
@@ -254,7 +256,8 @@ class TestTriviaAgentLoopPreprocessing:
         )
 
         request = TriviaRequest(question="test question")
-        result = loop.preprocess_request(request)
+        session = Session()
+        result = loop.preprocess_request(request, session)
 
         assert result is request
 
@@ -263,9 +266,10 @@ class TestTriviaAgentLoopPreprocessing:
         fake_mailboxes: TriviaMailboxes,
     ) -> None:
         """Test that preprocess_request can be overridden in subclass."""
+        from weakincentives.runtime import Session
 
         class CustomLoop(TriviaAgentLoop):
-            def preprocess_request(self, request: TriviaRequest) -> TriviaRequest:
+            def preprocess_request(self, request: TriviaRequest, session: Session) -> TriviaRequest:
                 return TriviaRequest(question=request.question.upper())
 
         mock_adapter: ProviderAdapter[TriviaResponse] = MagicMock()
@@ -276,7 +280,8 @@ class TestTriviaAgentLoopPreprocessing:
         )
 
         request = TriviaRequest(question="hello world")
-        result = loop.preprocess_request(request)
+        session = Session()
+        result = loop.preprocess_request(request, session)
 
         assert result.question == "HELLO WORLD"
 
@@ -289,6 +294,8 @@ class TestTriviaAgentLoopPostprocessing:
         fake_mailboxes: TriviaMailboxes,
     ) -> None:
         """Test that postprocess_response returns response unchanged by default."""
+        from weakincentives.runtime import Session
+
         mock_adapter: ProviderAdapter[TriviaResponse] = MagicMock()
 
         loop = TriviaAgentLoop(
@@ -297,7 +304,9 @@ class TestTriviaAgentLoopPostprocessing:
         )
 
         response = TriviaResponse(answer="42")
-        result = loop.postprocess_response(response)
+        mock_prompt = MagicMock()
+        session = Session()
+        result = loop.postprocess_response(response, mock_prompt, session)
 
         assert result is response
 
@@ -306,9 +315,16 @@ class TestTriviaAgentLoopPostprocessing:
         fake_mailboxes: TriviaMailboxes,
     ) -> None:
         """Test that postprocess_response can be overridden in subclass."""
+        from weakincentives import Prompt
+        from weakincentives.runtime import Session
 
         class CustomLoop(TriviaAgentLoop):
-            def postprocess_response(self, response: TriviaResponse) -> TriviaResponse:
+            def postprocess_response(
+                self,
+                response: TriviaResponse,
+                prompt: Prompt[TriviaResponse],
+                session: Session,
+            ) -> TriviaResponse:
                 return TriviaResponse(answer=f"Answer: {response.answer}")
 
         mock_adapter: ProviderAdapter[TriviaResponse] = MagicMock()
@@ -319,7 +335,9 @@ class TestTriviaAgentLoopPostprocessing:
         )
 
         response = TriviaResponse(answer="42")
-        result = loop.postprocess_response(response)
+        mock_prompt = MagicMock()
+        session = Session()
+        result = loop.postprocess_response(response, mock_prompt, session)
 
         assert result.answer == "Answer: 42"
 
@@ -327,15 +345,18 @@ class TestTriviaAgentLoopPostprocessing:
 class TestTriviaAgentLoopExecute:
     """Tests for TriviaAgentLoop.execute() with preprocessing/postprocessing."""
 
-    def test_execute_calls_preprocess_request(
+    def test_execute_calls_preprocess_request_via_prepare(
         self,
         fake_mailboxes: TriviaMailboxes,
     ) -> None:
-        """Test that execute() calls preprocess_request."""
-        from weakincentives.runtime import MainLoop
+        """Test that prepare() calls preprocess_request during execution."""
+        from weakincentives.runtime import Session
+
+        preprocess_calls: list[TriviaRequest] = []
 
         class CustomLoop(TriviaAgentLoop):
-            def preprocess_request(self, request: TriviaRequest) -> TriviaRequest:
+            def preprocess_request(self, request: TriviaRequest, session: Session) -> TriviaRequest:
+                preprocess_calls.append(request)
                 return TriviaRequest(question=request.question.strip())
 
         mock_adapter: ProviderAdapter[TriviaResponse] = MagicMock()
@@ -345,32 +366,33 @@ class TestTriviaAgentLoopExecute:
             requests=fake_mailboxes.requests,
         )
 
-        mock_response = MagicMock()
-        mock_response.output = TriviaResponse(answer="42")
-        mock_session = MagicMock()
+        request = TriviaRequest(question="  What is the answer?  ")
+        prompt, session = loop.prepare(request)
 
-        captured_requests: list[TriviaRequest] = []
-
-        def capture_execute(self_arg, request, **kwargs):
-            captured_requests.append(request)
-            return (mock_response, mock_session)
-
-        with patch.object(MainLoop, "execute", capture_execute):
-            request = TriviaRequest(question="  What is the answer?  ")
-            loop.execute(request)
-
-            assert len(captured_requests) == 1
-            assert captured_requests[0].question == "What is the answer?"
+        assert len(preprocess_calls) == 1
+        assert preprocess_calls[0].question == "  What is the answer?  "
+        # The prompt should have the preprocessed question bound
+        rendered = str(prompt.render())
+        assert "What is the answer?" in rendered
 
     def test_execute_calls_postprocess_response(
         self,
         fake_mailboxes: TriviaMailboxes,
     ) -> None:
         """Test that execute() calls postprocess_response."""
-        from weakincentives.runtime import MainLoop
+        from weakincentives import Prompt
+        from weakincentives.runtime import MainLoop, Session
+
+        postprocess_calls: list[tuple[TriviaResponse, bool, bool]] = []
 
         class CustomLoop(TriviaAgentLoop):
-            def postprocess_response(self, response: TriviaResponse) -> TriviaResponse:
+            def postprocess_response(
+                self,
+                response: TriviaResponse,
+                prompt: Prompt[TriviaResponse],
+                session: Session,
+            ) -> TriviaResponse:
+                postprocess_calls.append((response, prompt is not None, session is not None))
                 return TriviaResponse(answer=response.answer.strip())
 
         mock_adapter: ProviderAdapter[TriviaResponse] = MagicMock()
@@ -385,13 +407,18 @@ class TestTriviaAgentLoopExecute:
         mock_response.update = MagicMock(return_value=mock_response)
         mock_session = MagicMock()
 
+        # Call prepare() first to set up _last_prompt/_last_session
+        request = TriviaRequest(question="What is the answer?")
+        loop.prepare(request)
+
         with patch.object(MainLoop, "execute", return_value=(mock_response, mock_session)):
-            request = TriviaRequest(question="What is the answer?")
             loop.execute(request)
 
+            assert len(postprocess_calls) == 1
+            assert postprocess_calls[0][0].answer == "  42  "
+            assert postprocess_calls[0][1] is True  # prompt was passed
+            assert postprocess_calls[0][2] is True  # session was passed
             mock_response.update.assert_called_once()
-            call_kwargs = mock_response.update.call_args.kwargs
-            assert call_kwargs["output"].answer == "42"
 
     def test_execute_skips_postprocessing_when_output_is_none(
         self,
