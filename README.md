@@ -45,6 +45,8 @@ This simple concept naturally demonstrates all of WINK's key capabilities:
 ```
 starter/
 ├── README.md               # You are here
+├── AGENTS.md               # Project context for Claude
+├── CLAUDE.md -> AGENTS.md  # Symlink for Claude Code
 ├── Makefile                # Commands for running and development
 ├── pyproject.toml          # Dependencies and project config
 ├── debug_bundles/          # Execution artifacts (gitignored zips)
@@ -63,7 +65,9 @@ starter/
 │       ├── feedback.py     # TriviaHostReminder feedback provider
 │       ├── evaluators.py   # Trivia evaluator (checks secrets)
 │       └── ...             # Config, adapters, mailboxes, isolation
-└── tests/                  # 100% test coverage
+├── tests/                  # Unit tests (100% coverage)
+├── integration-tests/      # Integration tests (requires Redis + API key)
+└── prompt_overrides/       # Custom prompt overrides (optional)
 ```
 
 ## Quick Start
@@ -300,6 +304,7 @@ The evaluator checks:
 | `TRIVIA_REQUESTS_QUEUE` | No | `trivia:requests` | Request queue name |
 | `TRIVIA_EVAL_REQUESTS_QUEUE` | No | `trivia:eval:requests` | Eval queue name |
 | `TRIVIA_DEBUG_BUNDLES_DIR` | No | `./debug_bundles` | Debug bundle output (bundles named `{run_id}_{timestamp}.zip`) |
+| `TRIVIA_PROMPT_OVERRIDES_DIR` | No | `./prompt_overrides` | Custom prompt overrides directory |
 
 ## Development
 

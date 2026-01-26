@@ -28,29 +28,66 @@ make agent
 
 ## Inspecting Bundles
 
-Debug bundles are saved as `.zip` files. Use the WINK CLI to inspect them:
+Debug bundles are saved as `.zip` files. WINK provides two ways to inspect them:
+
+### For Humans: Debug Server
+
+Start an interactive debug server with a web UI:
 
 ```bash
-wink debug inspect debug_bundles/<bundle-name>.zip
+wink debug debug_bundles/<bundle-name>.zip
 ```
 
-Or extract manually:
+This opens a browser-based interface for exploring the bundle.
+
+### For Agents: SQL Queries
+
+Use `wink query` for programmatic SQL-based exploration:
+
+```bash
+# Show schema and available tables
+wink query debug_bundles/<bundle-name>.zip --schema
+
+# Run SQL queries
+wink query debug_bundles/<bundle-name>.zip "SELECT * FROM errors"
+
+# Get formatted table output
+wink query debug_bundles/<bundle-name>.zip "SELECT * FROM tool_calls" --table
+```
+
+### Manual Extraction
+
+You can also extract the raw bundle contents:
 
 ```bash
 unzip debug_bundles/<bundle-name>.zip -d /tmp/bundle
 ```
 
-## File Structure
+## Bundle Contents
 
-Each bundle contains:
+Each bundle contains structured data that gets loaded into SQLite tables:
+
+| Table | Description |
+|-------|-------------|
+| `manifest` | Bundle ID, status, timestamps |
+| `logs` | All log entries with event names and context |
+| `tool_calls` | Tool invocations with params, results, timing |
+| `errors` | Aggregated errors from logs and failed tools |
+| `session_slices` | Session state items |
+| `files` | Workspace files with paths and content |
+| `metrics` | Token usage and timing metrics |
+
+Raw file structure inside the zip:
 
 ```
 <bundle>.zip
-├── session.json      # Session state and metadata
-├── conversation.json # Full conversation history
-├── workspace/        # Filesystem snapshot
-├── logs/             # Execution logs
-└── metrics.json      # Timing and performance data
+├── manifest.json     # Bundle metadata
+├── config.json       # Configuration
+├── metrics.json      # Token usage and timing
+├── run_context.json  # Request/session/trace IDs
+├── logs/             # Execution logs (JSONL)
+├── session/          # Session state snapshots
+└── filesystem/       # Workspace files
 ```
 
 ## Cleanup

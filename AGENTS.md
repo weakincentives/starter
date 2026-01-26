@@ -84,7 +84,10 @@ uv run wink docs list
 uv run wink docs search "Feedback"
 uv run wink docs read guide TOOLS
 
-# Query debug bundles (use latest bundle or specify by name)
+# Debug bundles - human inspection (opens browser UI)
+uv run wink debug debug_bundles/
+
+# Query debug bundles - agent inspection (SQL interface)
 uv run wink query "debug_bundles/*.zip" --schema
 uv run wink query "debug_bundles/*.zip" "SELECT * FROM tool_calls"
 ```
