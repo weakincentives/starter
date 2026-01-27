@@ -158,15 +158,14 @@ The lucky dice tools (`pick_up_dice`, `throw_dice`) let players roll for bonus p
 Game rules start hidden and expand on demand. WINK provides a built-in `read_section` tool that agents can use to expand summarized sections:
 
 ```python
-class GameRulesSection(MarkdownSection[EmptyParams]):
-    def __init__(self) -> None:
-        super().__init__(
-            title="Game Rules",
-            key="rules",
-            template="## Secret Trivia Game Rules...",
-            summary="Game rules available. Use read_section('rules') to review.",
-            visibility=SectionVisibility.SUMMARY,  # Hidden until needed
-        )
+def build_game_rules_section() -> MarkdownSection[EmptyParams]:
+    return MarkdownSection[EmptyParams](
+        title="Game Rules",
+        key="rules",
+        template="## Secret Trivia Game Rules...",
+        summary="Game rules available. Use read_section('rules') to review.",
+        visibility=SectionVisibility.SUMMARY,  # Hidden until needed
+    )
 ```
 
 ### 4. Tools Attached to Sections (`sections.py`)
@@ -174,14 +173,13 @@ class GameRulesSection(MarkdownSection[EmptyParams]):
 The hints section provides the hint tool:
 
 ```python
-class HintsSection(MarkdownSection[EmptyParams]):
-    def __init__(self) -> None:
-        super().__init__(
-            title="Hints",
-            key="hints",
-            template="...",
-            tools=(hint_lookup_tool,),  # Tool scoped to this section
-        )
+def build_hints_section() -> MarkdownSection[EmptyParams]:
+    return MarkdownSection[EmptyParams](
+        title="Hints",
+        key="hints",
+        template="...",
+        tools=(hint_lookup_tool,),  # Tool scoped to this section
+    )
 ```
 
 ### 4.1. Tool Policies (`sections.py`)
@@ -189,22 +187,21 @@ class HintsSection(MarkdownSection[EmptyParams]):
 Tool policies enforce ordering constraints. The **Lucky Dice** mini-game demonstrates this - players can roll for bonus points, but must pick up the dice before throwing:
 
 ```python
-class LuckyDiceSection(MarkdownSection[EmptyParams]):
-    def __init__(self) -> None:
-        # Policy: throw_dice requires pick_up_dice to have been called first
-        dice_policy = SequentialDependencyPolicy(
-            dependencies={
-                "throw_dice": frozenset({"pick_up_dice"}),
-            }
-        )
+def build_lucky_dice_section() -> MarkdownSection[EmptyParams]:
+    # Policy: throw_dice requires pick_up_dice to have been called first
+    dice_policy = SequentialDependencyPolicy(
+        dependencies={
+            "throw_dice": frozenset({"pick_up_dice"}),
+        }
+    )
 
-        super().__init__(
-            title="Lucky Dice",
-            key="dice",
-            template="...",
-            tools=(pick_up_dice_tool, throw_dice_tool),
-            policies=(dice_policy,),  # Enforce tool ordering
-        )
+    return MarkdownSection[EmptyParams](
+        title="Lucky Dice",
+        key="dice",
+        template="...",
+        tools=(pick_up_dice_tool, throw_dice_tool),
+        policies=(dice_policy,),  # Enforce tool ordering
+    )
 ```
 
 If the agent tries to call `throw_dice` before `pick_up_dice`, the policy blocks the call with an error message. Try it:
