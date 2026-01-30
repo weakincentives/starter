@@ -1,4 +1,4 @@
-"""Tests for trivia agent worker."""
+"""Tests for trivia agent loop."""
 
 from __future__ import annotations
 
@@ -10,17 +10,17 @@ from unittest.mock import MagicMock, patch
 import fakeredis
 import pytest
 
-from trivia_agent.config import RedisSettings
-from trivia_agent.mailboxes import TriviaMailboxes, create_mailboxes
-from trivia_agent.models import TriviaRequest, TriviaResponse
-from trivia_agent.sections import QuestionParams, build_question_section
-from trivia_agent.worker import (
+from trivia_agent.agent_loop import (
     TriviaAgentLoop,
     TriviaRuntime,
     create_workspace_section,
     enumerate_workspace_mounts,
     main,
 )
+from trivia_agent.config import RedisSettings
+from trivia_agent.mailboxes import TriviaMailboxes, create_mailboxes
+from trivia_agent.models import TriviaRequest, TriviaResponse
+from trivia_agent.sections import QuestionParams, build_question_section
 
 if TYPE_CHECKING:
     from weakincentives.adapters import ProviderAdapter
@@ -310,7 +310,7 @@ class TestMain:
         monkeypatch.setenv("REDIS_URL", "redis://localhost:6379")
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
-        with patch("trivia_agent.worker.LoopGroup") as mock_loop_group:
+        with patch("trivia_agent.agent_loop.LoopGroup") as mock_loop_group:
             mock_instance = MagicMock()
             mock_loop_group.return_value = mock_instance
             result = main(runtime=runtime)
@@ -336,7 +336,7 @@ class TestMain:
         )
 
         # Patch LoopGroup.run to avoid actually running
-        with patch("trivia_agent.worker.LoopGroup") as mock_loop_group:
+        with patch("trivia_agent.agent_loop.LoopGroup") as mock_loop_group:
             mock_instance = MagicMock()
             mock_loop_group.return_value = mock_instance
 
@@ -363,7 +363,7 @@ class TestMain:
 
         runtime = TriviaRuntime(out=out, err=err)
 
-        with patch("trivia_agent.worker.LoopGroup") as mock_loop_group:
+        with patch("trivia_agent.agent_loop.LoopGroup") as mock_loop_group:
             mock_instance = MagicMock()
             mock_loop_group.return_value = mock_instance
 
@@ -393,8 +393,8 @@ class TestMain:
 
         bundles_dir = tmp_path / "debug_bundles"
 
-        with patch("trivia_agent.worker.LoopGroup") as mock_loop_group:
-            with patch("trivia_agent.worker.TriviaAgentLoop") as mock_qa_loop:
+        with patch("trivia_agent.agent_loop.LoopGroup") as mock_loop_group:
+            with patch("trivia_agent.agent_loop.TriviaAgentLoop") as mock_qa_loop:
                 mock_instance = MagicMock()
                 mock_loop_group.return_value = mock_instance
                 mock_qa_loop.return_value = MagicMock()
@@ -428,8 +428,8 @@ class TestMain:
             err=err,
         )
 
-        with patch("trivia_agent.worker.LoopGroup") as mock_loop_group:
-            with patch("trivia_agent.worker.TriviaAgentLoop") as mock_qa_loop:
+        with patch("trivia_agent.agent_loop.LoopGroup") as mock_loop_group:
+            with patch("trivia_agent.agent_loop.TriviaAgentLoop") as mock_qa_loop:
                 mock_instance = MagicMock()
                 mock_loop_group.return_value = mock_instance
                 mock_qa_loop.return_value = MagicMock()
@@ -465,8 +465,8 @@ class TestMain:
 
         overrides_dir = tmp_path / "prompt_overrides"
 
-        with patch("trivia_agent.worker.LoopGroup") as mock_loop_group:
-            with patch("trivia_agent.worker.TriviaAgentLoop") as mock_qa_loop:
+        with patch("trivia_agent.agent_loop.LoopGroup") as mock_loop_group:
+            with patch("trivia_agent.agent_loop.TriviaAgentLoop") as mock_qa_loop:
                 mock_instance = MagicMock()
                 mock_loop_group.return_value = mock_instance
                 mock_qa_loop.return_value = MagicMock()
@@ -493,7 +493,7 @@ class TestMain:
         monkeypatch.setenv("REDIS_URL", "redis://localhost:6379")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
-        with patch("trivia_agent.worker.create_adapter") as mock_create_adapter:
+        with patch("trivia_agent.agent_loop.create_adapter") as mock_create_adapter:
             mock_create_adapter.side_effect = RuntimeError("SDK initialization failed")
             result = main(runtime=runtime)
 
@@ -514,7 +514,7 @@ class TestMain:
 
         monkeypatch.setenv("REDIS_URL", "redis://localhost:6379")
 
-        with patch("trivia_agent.worker.create_mailboxes") as mock_create_mailboxes:
+        with patch("trivia_agent.agent_loop.create_mailboxes") as mock_create_mailboxes:
             mock_create_mailboxes.side_effect = ConnectionError("Connection refused")
             result = main(runtime=runtime)
 

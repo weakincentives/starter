@@ -17,12 +17,12 @@ This module provides:
 
 Usage:
     Import and call `build_feedback_providers()` during agent setup to get
-    a tuple of configured providers ready for the WINK MainLoop::
+    a tuple of configured providers ready for the WINK AgentLoop::
 
         from trivia_agent.feedback import build_feedback_providers
 
         providers = build_feedback_providers()
-        # Pass to MainLoop or session configuration
+        # Pass to AgentLoop or session configuration
 
 See Also:
     - weakincentives.prompt.DeadlineFeedback: Built-in time awareness provider
@@ -160,7 +160,7 @@ def build_feedback_providers() -> tuple[FeedbackProviderConfig, ...]:
 
     Returns:
         tuple[FeedbackProviderConfig, ...]: A tuple of two configured feedback
-        providers ready to be passed to the WINK MainLoop or session builder.
+        providers ready to be passed to the WINK AgentLoop or session builder.
 
     Example:
         >>> from trivia_agent.feedback import build_feedback_providers

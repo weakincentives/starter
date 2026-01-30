@@ -48,7 +48,7 @@ make dispatch-eval QUESTION="What is the secret number?" EXPECTED="42"
 
 ```
 src/trivia_agent/
-├── worker.py       # MainLoop entry point
+├── agent_loop.py   # AgentLoop entry point
 ├── eval_loop.py    # EvalLoop factory
 ├── sections.py     # Question, GameRules, Hints, LuckyDice sections
 ├── tools.py        # hint_lookup, pick_up_dice, throw_dice tools

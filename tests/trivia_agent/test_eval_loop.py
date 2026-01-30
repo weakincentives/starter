@@ -9,11 +9,11 @@ import fakeredis
 import pytest
 from weakincentives.evals import EvalLoop
 
+from trivia_agent.agent_loop import TriviaAgentLoop
 from trivia_agent.config import RedisSettings
 from trivia_agent.eval_loop import create_eval_loop
 from trivia_agent.mailboxes import TriviaMailboxes, create_mailboxes
 from trivia_agent.models import TriviaResponse
-from trivia_agent.worker import TriviaAgentLoop
 
 if TYPE_CHECKING:
     from weakincentives.adapters import ProviderAdapter

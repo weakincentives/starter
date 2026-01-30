@@ -14,7 +14,7 @@ Example:
     >>> from trivia_agent.isolation import resolve_isolation_config
     >>> import os
     >>> config = resolve_isolation_config(os.environ)
-    >>> # Use config with your agent's MainLoop or EvalLoop
+    >>> # Use config with your agent's AgentLoop or EvalLoop
 """
 
 from __future__ import annotations
@@ -135,16 +135,16 @@ def resolve_isolation_config(
             - TRIVIA_DISABLE_SANDBOX: Set to disable sandbox (e.g., "1" or "true")
 
     Returns:
-        An IsolationConfig ready to pass to MainLoop or EvalLoop. Contains:
+        An IsolationConfig ready to pass to AgentLoop or EvalLoop. Contains:
         - sandbox: SandboxConfig with enabled/disabled state
         - skills: SkillConfig with discovered skills, or None
         - api_key: The Anthropic API key for authenticated requests
 
     Example:
         >>> import os
-        >>> from trivia_agent.worker import MainLoop
+        >>> from trivia_agent.agent_loop import AgentLoop
         >>> config = resolve_isolation_config(os.environ)
-        >>> loop = MainLoop(isolation=config, ...)
+        >>> loop = AgentLoop(isolation=config, ...)
     """
     skills_config = resolve_skills_config(env)
     api_key = env.get(API_KEY_ENV)

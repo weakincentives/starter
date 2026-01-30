@@ -3,12 +3,12 @@
 This module provides evaluation capabilities for the trivia agent,
 allowing you to test agent responses against expected secret answers.
 
-The EvalLoop wraps your production MainLoop, ensuring evaluations run
+The EvalLoop wraps your production AgentLoop, ensuring evaluations run
 against your exact agent configuration with no drift or separate test harness.
 
 Key features:
     - Session-aware evaluators for behavioral assertions
-    - Integration with MainLoop for consistent execution
+    - Integration with AgentLoop for consistent execution
     - Collocated evals (same prompts, tools, and config as production)
     - Debug bundles with eval metadata for tracing
 
@@ -20,7 +20,7 @@ Usage:
     Or programmatically::
 
         from trivia_agent.eval_loop import create_eval_loop
-        from trivia_agent.worker import TriviaAgentLoop
+        from trivia_agent.agent_loop import TriviaAgentLoop
         from trivia_agent.mailboxes import EvalRequestsMailbox
 
         loop = TriviaAgentLoop(...)
@@ -30,7 +30,7 @@ Usage:
 
 See Also:
     - :mod:`trivia_agent.evaluators` for the trivia_evaluator implementation
-    - :mod:`trivia_agent.worker` for the TriviaAgentLoop being wrapped
+    - :mod:`trivia_agent.agent_loop` for the TriviaAgentLoop being wrapped
 """
 
 from __future__ import annotations
@@ -40,10 +40,10 @@ from typing import cast
 
 from weakincentives.evals import EvalLoop, EvalLoopConfig, SessionEvaluator
 
+from trivia_agent.agent_loop import TriviaAgentLoop
 from trivia_agent.evaluators import trivia_evaluator
 from trivia_agent.mailboxes import EvalRequestsMailbox
 from trivia_agent.models import TriviaRequest, TriviaResponse
-from trivia_agent.worker import TriviaAgentLoop
 
 
 def create_eval_loop(
@@ -87,7 +87,7 @@ def create_eval_loop(
 
             from pathlib import Path
             from trivia_agent.eval_loop import create_eval_loop
-            from trivia_agent.worker import TriviaAgentLoop
+            from trivia_agent.agent_loop import TriviaAgentLoop
             from trivia_agent.mailboxes import EvalRequestsMailbox
 
             # Set up components
