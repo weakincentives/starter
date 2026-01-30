@@ -9,7 +9,7 @@ from uuid import UUID
 
 import pytest
 from weakincentives.evals import EvalResult, Score
-from weakincentives.runtime import MainLoopResult
+from weakincentives.runtime import AgentLoopResult
 
 from trivia_agent.dispatch import (
     DispatchRuntime,
@@ -198,7 +198,7 @@ class TestWaitForResponse:
     def test_returns_matching_response(self) -> None:
         """Test that matching response is returned."""
         request_id = "12345678-1234-5678-1234-567812345678"
-        response = MainLoopResult(
+        response = AgentLoopResult(
             request_id=UUID(request_id),
             output=TriviaResponse(answer="42"),
             error=None,
@@ -256,12 +256,12 @@ class TestWaitForResponse:
         request_id = "12345678-1234-5678-1234-567812345678"
         wrong_id = "87654321-4321-8765-4321-876543218765"
 
-        wrong_response = MainLoopResult(
+        wrong_response = AgentLoopResult(
             request_id=UUID(wrong_id),
             output=TriviaResponse(answer="wrong"),
             error=None,
         )
-        correct_response = MainLoopResult(
+        correct_response = AgentLoopResult(
             request_id=UUID(request_id),
             output=TriviaResponse(answer="correct"),
             error=None,
@@ -316,7 +316,7 @@ class TestMainWithWait:
         )
 
         mock_response_msg = MagicMock()
-        mock_response_msg.body = MainLoopResult(
+        mock_response_msg.body = AgentLoopResult(
             request_id=UUID("12345678-1234-5678-1234-567812345678"),
             output=TriviaResponse(answer="4"),
             error=None,
@@ -340,9 +340,9 @@ class TestMainWithWait:
             now=now,
         )
 
-        # Patch Redis and MainLoopRequest to control request_id
+        # Patch Redis and AgentLoopRequest to control request_id
         with patch("trivia_agent.dispatch.Redis"):
-            with patch("trivia_agent.dispatch.MainLoopRequest") as mock_request_cls:
+            with patch("trivia_agent.dispatch.AgentLoopRequest") as mock_request_cls:
                 mock_request = MagicMock()
                 mock_request.request_id = UUID("12345678-1234-5678-1234-567812345678")
                 mock_request.request = MagicMock()
@@ -416,7 +416,7 @@ class TestMainWithWait:
         )
 
         mock_response_msg = MagicMock()
-        mock_response_msg.body = MainLoopResult(
+        mock_response_msg.body = AgentLoopResult(
             request_id=UUID("12345678-1234-5678-1234-567812345678"),
             output=None,
             error="Agent failed",
@@ -441,7 +441,7 @@ class TestMainWithWait:
         )
 
         with patch("trivia_agent.dispatch.Redis"):
-            with patch("trivia_agent.dispatch.MainLoopRequest") as mock_request_cls:
+            with patch("trivia_agent.dispatch.AgentLoopRequest") as mock_request_cls:
                 mock_request = MagicMock()
                 mock_request.request_id = UUID("12345678-1234-5678-1234-567812345678")
                 mock_request.request = MagicMock()
@@ -472,7 +472,7 @@ class TestMainWithWait:
         )
 
         mock_response_msg = MagicMock()
-        mock_response_msg.body = MainLoopResult(
+        mock_response_msg.body = AgentLoopResult(
             request_id=UUID("12345678-1234-5678-1234-567812345678"),
             output=None,
             error=None,
@@ -497,7 +497,7 @@ class TestMainWithWait:
         )
 
         with patch("trivia_agent.dispatch.Redis"):
-            with patch("trivia_agent.dispatch.MainLoopRequest") as mock_request_cls:
+            with patch("trivia_agent.dispatch.AgentLoopRequest") as mock_request_cls:
                 mock_request = MagicMock()
                 mock_request.request_id = UUID("12345678-1234-5678-1234-567812345678")
                 mock_request.request = MagicMock()

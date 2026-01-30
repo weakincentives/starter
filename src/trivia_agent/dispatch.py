@@ -41,7 +41,7 @@ from uuid import uuid4
 from redis import Redis
 from weakincentives import FrozenDataclass
 from weakincentives.evals import EvalRequest, EvalResult, Experiment, Sample
-from weakincentives.runtime import MainLoopRequest, MainLoopResult
+from weakincentives.runtime import AgentLoopRequest, AgentLoopResult
 from weakincentives.runtime.mailbox import Mailbox, ReceiptHandleExpiredError
 
 from trivia_agent.config import load_redis_settings
@@ -100,7 +100,7 @@ class DispatchRuntime:
     """
 
     mailboxes: TriviaMailboxes | None = None
-    responses: Mailbox[MainLoopResult[TriviaResponse], None] | None = None
+    responses: Mailbox[AgentLoopResult[TriviaResponse], None] | None = None
     eval_results: Mailbox[EvalResult, None] | None = None
     out: TextIO = field(default_factory=lambda: sys.stdout)
     err: TextIO = field(default_factory=lambda: sys.stderr)
@@ -155,12 +155,12 @@ def _wait_for_eval_result(
 
 
 def _wait_for_response(
-    responses: Mailbox[MainLoopResult[TriviaResponse], None],
+    responses: Mailbox[AgentLoopResult[TriviaResponse], None],
     request_id: str,
     timeout_seconds: float,
     wait_time_seconds: int,
     now: Callable[[], float],
-) -> MainLoopResult[TriviaResponse] | None:
+) -> AgentLoopResult[TriviaResponse] | None:
     """Wait for a response matching the request ID.
 
     Args:
@@ -400,7 +400,7 @@ def main(
             client.close()
 
     # Submit as regular request
-    main_request = MainLoopRequest(request=request)
+    main_request = AgentLoopRequest(request=request)
 
     if args.no_wait:
         # Just submit and exit
