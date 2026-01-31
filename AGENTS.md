@@ -82,7 +82,7 @@ tests/                         # 100% coverage
 # Documentation
 uv run wink docs list
 uv run wink docs search "Feedback"
-uv run wink docs read guide TOOLS
+uv run wink docs read guide tools
 
 # Debug bundles - human inspection (opens browser UI)
 uv run wink debug debug_bundles/
@@ -97,8 +97,21 @@ uv run wink query "debug_bundles/*.zip" "SELECT * FROM tool_calls"
 | Table | Description |
 |-------|-------------|
 | `manifest` | Bundle metadata (status, timestamps) |
+| `logs` | Log entries with optional sequence numbers |
+| `transcript` | Transcript entries from TranscriptCollector |
+| `tool_calls` | Tool invocations |
 | `errors` | Aggregated errors |
-| `tool_calls` | Tool invocations (hint_lookup usage) |
-| `metrics` | Token usage |
 | `session_slices` | Session state |
 | `files` | Workspace files |
+| `config` | Flattened configuration |
+| `metrics` | Token usage and timing |
+| `run_context` | Execution IDs |
+
+### Debug Bundle Views
+
+| View | Description |
+|------|-------------|
+| `tool_timeline` | Tool calls ordered by timestamp with duration |
+| `native_tool_calls` | Native tool calls from transcripts |
+| `transcript_entries` | TranscriptCollector entries |
+| `error_summary` | Errors with truncated traceback |
