@@ -38,6 +38,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
+from weakincentives.debug.bundle import BundleConfig
 from weakincentives.evals import EvalLoop, EvalLoopConfig, SessionEvaluator
 
 from trivia_agent.agent_loop import TriviaAgentLoop
@@ -110,7 +111,9 @@ def create_eval_loop(
         session context (tool calls, messages, etc.) when scoring responses.
         This enables richer evaluation logic beyond simple string matching.
     """
-    config = EvalLoopConfig(debug_bundle_dir=debug_bundle_dir)
+    config = EvalLoopConfig(
+        debug_bundle=BundleConfig(target=debug_bundle_dir) if debug_bundle_dir else None
+    )
     return EvalLoop(
         loop=loop,
         evaluator=cast(SessionEvaluator, trivia_evaluator),  # Session-aware evaluator

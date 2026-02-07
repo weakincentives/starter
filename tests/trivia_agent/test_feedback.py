@@ -17,15 +17,16 @@ class TestTriviaHostReminder:
         """Test should_run returns False when below threshold on first run."""
         reminder = TriviaHostReminder(max_calls_before_reminder=5)
         context = MagicMock()
-        context.last_feedback = None
+        context.last_feedback_for_provider.return_value = None
         context.tool_call_count = 3
         assert reminder.should_run(context=context) is False
+        context.last_feedback_for_provider.assert_called_with("TriviaHostReminder")
 
     def test_should_run_first_time_at_threshold(self) -> None:
         """Test should_run returns True when at threshold on first run."""
         reminder = TriviaHostReminder(max_calls_before_reminder=5)
         context = MagicMock()
-        context.last_feedback = None
+        context.last_feedback_for_provider.return_value = None
         context.tool_call_count = 5
         assert reminder.should_run(context=context) is True
 
@@ -33,16 +34,17 @@ class TestTriviaHostReminder:
         """Test should_run returns False after feedback if below threshold."""
         reminder = TriviaHostReminder(max_calls_before_reminder=5)
         context = MagicMock()
-        context.last_feedback = MagicMock()  # Not None
-        context.tool_calls_since_last_feedback.return_value = 3
+        context.last_feedback_for_provider.return_value = MagicMock()  # Not None
+        context.tool_calls_since_last_feedback_for_provider.return_value = 3
         assert reminder.should_run(context=context) is False
+        context.tool_calls_since_last_feedback_for_provider.assert_called_with("TriviaHostReminder")
 
     def test_should_run_after_feedback_at_threshold(self) -> None:
         """Test should_run returns True after feedback when at threshold."""
         reminder = TriviaHostReminder(max_calls_before_reminder=5)
         context = MagicMock()
-        context.last_feedback = MagicMock()  # Not None
-        context.tool_calls_since_last_feedback.return_value = 5
+        context.last_feedback_for_provider.return_value = MagicMock()  # Not None
+        context.tool_calls_since_last_feedback_for_provider.return_value = 5
         assert reminder.should_run(context=context) is True
 
     def test_provide_returns_feedback(self) -> None:

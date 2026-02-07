@@ -105,8 +105,8 @@ class TriviaHostReminder:
             tool calls (either total or since last feedback), False otherwise.
         """
         # Don't spam - check if we already gave feedback
-        if context.last_feedback is not None:
-            calls_since = context.tool_calls_since_last_feedback()
+        if context.last_feedback_for_provider(self.name) is not None:
+            calls_since = context.tool_calls_since_last_feedback_for_provider(self.name)
             return calls_since >= self.max_calls_before_reminder
         return context.tool_call_count >= self.max_calls_before_reminder
 
