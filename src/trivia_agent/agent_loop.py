@@ -16,14 +16,12 @@ import os
 import sys
 from collections.abc import Sequence
 from dataclasses import field
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
 from weakincentives import FrozenDataclass, Prompt
 from weakincentives.adapters import ProviderAdapter
 from weakincentives.adapters.claude_agent_sdk import ClaudeAgentWorkspaceSection, HostMount
-from weakincentives.deadlines import Deadline
 from weakincentives.debug.bundle import BundleConfig
 from weakincentives.prompt import PromptTemplate
 from weakincentives.prompt.overrides import LocalPromptOverridesStore, PromptOverridesStore
@@ -56,9 +54,6 @@ from trivia_agent.sections import (
 
 if TYPE_CHECKING:
     from weakincentives.evals import Experiment
-
-# Default deadline duration for agent execution (1 minute)
-DEFAULT_DEADLINE_DURATION = timedelta(minutes=1)
 
 # Default workspace seed directory
 DEFAULT_WORKSPACE_DIR = Path(__file__).parent.parent.parent / "workspace"
@@ -483,10 +478,8 @@ def main(
         err.write(f"Failed to connect to Redis: {e}\n")
         return 1
 
-    # Configure AgentLoop with deadline and optional debug bundles
-    default_deadline = Deadline(expires_at=datetime.now(UTC) + DEFAULT_DEADLINE_DURATION)
+    # Configure AgentLoop with optional debug bundles
     config = AgentLoopConfig(
-        deadline=default_deadline,
         debug_bundle=(
             BundleConfig(target=settings.debug_bundles_dir) if settings.debug_bundles_dir else None
         ),

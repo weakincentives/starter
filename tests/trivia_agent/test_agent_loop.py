@@ -440,10 +440,9 @@ class TestMain:
 
         assert result == 0
         call_kwargs = mock_qa_loop.call_args.kwargs
-        # Config is always set now (has deadline), but debug_bundle should be None
         assert call_kwargs.get("config") is not None
         assert call_kwargs["config"].debug_bundle is None
-        assert call_kwargs["config"].deadline is not None
+        assert call_kwargs["config"].deadline is None
 
     def test_prompt_overrides_store_when_dir_set(
         self,

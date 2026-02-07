@@ -35,11 +35,13 @@ import sys
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import field
+from datetime import UTC, datetime, timedelta
 from typing import TextIO
 from uuid import uuid4
 
 from redis import Redis
 from weakincentives import FrozenDataclass
+from weakincentives.deadlines import Deadline
 from weakincentives.evals import EvalRequest, EvalResult, Experiment, Sample
 from weakincentives.runtime import AgentLoopRequest, AgentLoopResult
 from weakincentives.runtime.mailbox import Mailbox, ReceiptHandleExpiredError
@@ -61,6 +63,9 @@ EVAL_REPLY_QUEUE_PREFIX = "qa:eval:replies"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_WAIT_TIME_SECONDS = 5
 REPLY_QUEUE_PREFIX = "qa:replies"
+
+# Default deadline duration for agent execution
+DEFAULT_DEADLINE_DURATION = timedelta(minutes=1)
 
 
 @FrozenDataclass()
@@ -399,8 +404,9 @@ def main(
             eval_results.close()
             client.close()
 
-    # Submit as regular request
-    main_request = AgentLoopRequest(request=request)
+    # Submit as regular request with per-request deadline
+    deadline = Deadline(expires_at=datetime.now(UTC) + DEFAULT_DEADLINE_DURATION)
+    main_request = AgentLoopRequest(request=request, deadline=deadline)
 
     if args.no_wait:
         # Just submit and exit
