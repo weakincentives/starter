@@ -3,12 +3,13 @@
 from pathlib import Path
 
 from weakincentives.adapters.claude_agent_sdk.isolation import IsolationConfig
-from weakincentives.skills import SkillConfig
 
 from trivia_agent.isolation import (
+    _collect_bedrock_env,
     discover_skills,
+    has_auth,
     resolve_isolation_config,
-    resolve_skills_config,
+    resolve_skills,
 )
 
 
@@ -58,28 +59,78 @@ class TestDiscoverSkills:
         assert [r.source.name for r in result] == ["alpha", "beta", "zebra"]
 
 
-class TestResolveSkillsConfig:
-    """Tests for resolve_skills_config function."""
+class TestResolveSkills:
+    """Tests for resolve_skills function."""
 
-    def test_returns_none_for_empty_env(self, tmp_path: Path) -> None:
-        """Test that empty environment with no default skills returns None."""
-        result = resolve_skills_config({})
-        # May return None or SkillConfig depending on default skills dir
-        assert result is None or isinstance(result, SkillConfig)
+    def test_returns_tuple_for_empty_env(self) -> None:
+        """Test that empty environment returns a tuple (possibly empty)."""
+        result = resolve_skills({})
+        assert isinstance(result, tuple)
 
-    def test_returns_none_for_nonexistent_dir(self) -> None:
-        """Test that nonexistent skills dir returns None."""
-        result = resolve_skills_config({"TRIVIA_SKILLS_DIR": "/nonexistent/path"})
-        assert result is None
+    def test_returns_empty_for_nonexistent_dir(self) -> None:
+        """Test that nonexistent skills dir returns empty tuple."""
+        result = resolve_skills({"TRIVIA_SKILLS_DIR": "/nonexistent/path"})
+        assert result == ()
 
-    def test_returns_config_for_valid_skills_dir(self, tmp_path: Path) -> None:
-        """Test that valid skills directory returns SkillConfig."""
+    def test_returns_skills_for_valid_dir(self, tmp_path: Path) -> None:
+        """Test that valid skills directory returns SkillMount tuple."""
         skill_dir = tmp_path / "my-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("---\nname: my-skill\n---")
-        result = resolve_skills_config({"TRIVIA_SKILLS_DIR": str(tmp_path)})
-        assert isinstance(result, SkillConfig)
-        assert len(result.skills) == 1
+        result = resolve_skills({"TRIVIA_SKILLS_DIR": str(tmp_path)})
+        assert len(result) == 1
+        assert result[0].source == skill_dir
+
+
+class TestCollectBedrockEnv:
+    """Tests for _collect_bedrock_env function."""
+
+    def test_collects_aws_vars(self) -> None:
+        """Test that AWS_* variables are collected."""
+        env = {"AWS_PROFILE": "test", "AWS_REGION": "us-west-2", "OTHER": "ignore"}
+        result = _collect_bedrock_env(env)
+        assert result == {"AWS_PROFILE": "test", "AWS_REGION": "us-west-2"}
+
+    def test_collects_bedrock_var(self) -> None:
+        """Test that CLAUDE_CODE_USE_BEDROCK is collected."""
+        result = _collect_bedrock_env({"CLAUDE_CODE_USE_BEDROCK": "1"})
+        assert result == {"CLAUDE_CODE_USE_BEDROCK": "1"}
+
+    def test_collects_home(self) -> None:
+        """Test that HOME is collected."""
+        result = _collect_bedrock_env({"HOME": "/home/user"})
+        assert result == {"HOME": "/home/user"}
+
+    def test_excludes_claudecode(self) -> None:
+        """Test that CLAUDECODE is excluded."""
+        result = _collect_bedrock_env({"CLAUDECODE": "1", "AWS_REGION": "us-east-1"})
+        assert "CLAUDECODE" not in result
+        assert "AWS_REGION" in result
+
+    def test_returns_empty_for_irrelevant_vars(self) -> None:
+        """Test that irrelevant vars are not collected."""
+        result = _collect_bedrock_env({"PATH": "/usr/bin", "TERM": "xterm"})
+        assert result == {}
+
+
+class TestHasAuth:
+    """Tests for has_auth function."""
+
+    def test_returns_false_for_empty_env(self) -> None:
+        """Test that empty environment has no auth."""
+        assert has_auth({}) is False
+
+    def test_returns_true_for_api_key(self) -> None:
+        """Test that ANTHROPIC_API_KEY provides auth."""
+        assert has_auth({"ANTHROPIC_API_KEY": "test-key"}) is True
+
+    def test_returns_true_for_bedrock(self) -> None:
+        """Test that CLAUDE_CODE_USE_BEDROCK provides auth."""
+        assert has_auth({"CLAUDE_CODE_USE_BEDROCK": "1"}) is True
+
+    def test_returns_true_when_both_set(self) -> None:
+        """Test that both auth methods together work."""
+        assert has_auth({"ANTHROPIC_API_KEY": "key", "CLAUDE_CODE_USE_BEDROCK": "1"}) is True
 
 
 class TestResolveIsolationConfig:
@@ -112,11 +163,29 @@ class TestResolveIsolationConfig:
         result = resolve_isolation_config({})
         assert result.api_key is None
 
-    def test_includes_skills_when_found(self, tmp_path: Path) -> None:
-        """Test that skills are included when found."""
-        skill_dir = tmp_path / "my-skill"
-        skill_dir.mkdir()
-        (skill_dir / "SKILL.md").write_text("---\nname: my-skill\n---")
-        result = resolve_isolation_config({"TRIVIA_SKILLS_DIR": str(tmp_path)})
-        assert result.skills is not None
-        assert len(result.skills.skills) == 1
+    def test_bedrock_passes_env_not_include_host(self) -> None:
+        """Test that Bedrock config passes explicit env vars."""
+        result = resolve_isolation_config(
+            {
+                "CLAUDE_CODE_USE_BEDROCK": "1",
+                "AWS_PROFILE": "my-profile",
+                "AWS_REGION": "us-west-2",
+            }
+        )
+        assert result.include_host_env is False
+        assert result.api_key is None
+        assert result.env is not None
+        assert result.env["CLAUDE_CODE_USE_BEDROCK"] == "1"
+        assert result.env["AWS_PROFILE"] == "my-profile"
+
+    def test_bedrock_excludes_claudecode(self) -> None:
+        """Test that Bedrock config excludes CLAUDECODE env var."""
+        result = resolve_isolation_config(
+            {
+                "CLAUDE_CODE_USE_BEDROCK": "1",
+                "CLAUDECODE": "1",
+                "AWS_REGION": "us-east-1",
+            }
+        )
+        assert result.env is not None
+        assert "CLAUDECODE" not in result.env
