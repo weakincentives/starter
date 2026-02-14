@@ -47,6 +47,8 @@ Usage:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from weakincentives import FrozenDataclass, MarkdownSection
 from weakincentives.prompt import (
     SectionVisibility,
@@ -129,15 +131,27 @@ class EmptyParams:
 # =============================================================================
 
 
-def build_question_section() -> MarkdownSection[QuestionParams]:
+def build_question_section(
+    *,
+    skills: Sequence[object] = (),
+) -> MarkdownSection[QuestionParams]:
     """Build a section that displays the player's trivia question.
 
     Creates a MarkdownSection that renders the current question being asked by
     the player. It uses a simple template with a single ${question} placeholder
     that gets replaced with the actual question text from QuestionParams.
 
+    Skills are attached to this section so the agent has access to secret
+    knowledge during prompt rendering. Skills on sections participate in
+    progressive disclosure alongside tools.
+
     The section is registered under the key "question", so parameters should be
     passed as {"question": QuestionParams(question="...")}.
+
+    Args:
+        skills: Sequence of SkillMount objects to attach to this section.
+            Skills provide domain knowledge (e.g., secret answers) that the
+            agent can access during execution.
 
     Returns:
         MarkdownSection[QuestionParams]: A configured section ready to be included
@@ -163,6 +177,7 @@ def build_question_section() -> MarkdownSection[QuestionParams]:
         key="question",
         template="${question}",
         default_params=QuestionParams(question=""),
+        skills=skills or None,
     )
 
 

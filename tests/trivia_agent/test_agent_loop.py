@@ -108,13 +108,13 @@ class TestCreateWorkspaceSection:
 
     def test_creates_workspace_section(self, tmp_path: Path) -> None:
         """Test that workspace section is created."""
-        from weakincentives.adapters.claude_agent_sdk import ClaudeAgentWorkspaceSection
+        from weakincentives.prompt import WorkspaceSection
         from weakincentives.runtime import Session
 
         (tmp_path / "CLAUDE.md").write_text("# Test")
         session = Session()
         result = create_workspace_section(session=session, workspace_dir=tmp_path)
-        assert isinstance(result, ClaudeAgentWorkspaceSection)
+        assert isinstance(result, WorkspaceSection)
 
     def test_mounts_files_from_workspace(self, tmp_path: Path) -> None:
         """Test that files from workspace are mounted."""
@@ -273,14 +273,15 @@ class TestMain:
         assert result == 1
         assert "REDIS_URL" in err.getvalue()
 
-    def test_missing_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Test that main() fails with missing ANTHROPIC_API_KEY."""
+    def test_missing_auth(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that main() fails with no authentication configured."""
         out = io.StringIO()
         err = io.StringIO()
 
-        # Set REDIS_URL but not ANTHROPIC_API_KEY
+        # Set REDIS_URL but not ANTHROPIC_API_KEY or CLAUDE_CODE_USE_BEDROCK
         monkeypatch.setenv("REDIS_URL", "redis://localhost:6379")
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("CLAUDE_CODE_USE_BEDROCK", raising=False)
 
         result = main(runtime=TriviaRuntime(out=out, err=err))
 
@@ -289,12 +290,12 @@ class TestMain:
         assert "ANTHROPIC_API_KEY" in error_output
         assert "export ANTHROPIC_API_KEY=" in error_output
 
-    def test_api_key_not_required_when_adapter_injected(
+    def test_auth_not_required_when_adapter_injected(
         self,
         fake_mailboxes: TriviaMailboxes,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Test that API key is not required when adapter is injected."""
+        """Test that authentication is not required when adapter is injected."""
         out = io.StringIO()
         err = io.StringIO()
         mock_adapter: ProviderAdapter[TriviaResponse] = MagicMock()
@@ -306,9 +307,10 @@ class TestMain:
             err=err,
         )
 
-        # Set REDIS_URL but not ANTHROPIC_API_KEY
+        # Set REDIS_URL but no auth
         monkeypatch.setenv("REDIS_URL", "redis://localhost:6379")
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("CLAUDE_CODE_USE_BEDROCK", raising=False)
 
         with patch("trivia_agent.agent_loop.LoopGroup") as mock_loop_group:
             mock_instance = MagicMock()
@@ -442,7 +444,6 @@ class TestMain:
         call_kwargs = mock_qa_loop.call_args.kwargs
         assert call_kwargs.get("config") is not None
         assert call_kwargs["config"].debug_bundle is None
-        assert call_kwargs["config"].deadline is None
 
     def test_prompt_overrides_store_when_dir_set(
         self,

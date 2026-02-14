@@ -54,7 +54,7 @@ src/trivia_agent/
 ├── tools.py        # hint_lookup, pick_up_dice, throw_dice tools
 ├── feedback.py     # TriviaHostReminder (stay on task)
 ├── evaluators.py   # trivia_evaluator (checks secrets + brevity)
-├── isolation.py    # Skills and sandbox config
+├── isolation.py    # Sandbox config and skill discovery
 └── ...             # Config, adapters, mailboxes, dispatch
 
 skills/secret-trivia/SKILL.md  # The secret answers
@@ -67,14 +67,14 @@ tests/                         # 100% coverage
 
 | Feature | File | Trivia Use Case |
 |---------|------|-----------------|
-| Skills | `skills/secret-trivia/SKILL.md` | Secret answers only the agent knows |
+| Skills on Sections | `sections.py`, `skills/secret-trivia/SKILL.md` | Secret answers attached to question section |
 | Custom Tools | `tools.py` | `hint_lookup` gives clues; Lucky Dice tools for bonus rolls |
 | Tool Policies | `sections.py` | `SequentialDependencyPolicy` enforces dice pickup before throw |
 | Progressive Disclosure | `sections.py` | Game rules hidden until agent needs them |
 | Tools in Sections | `sections.py` | Hints tool attached to HintsSection |
 | Feedback Providers | `feedback.py` | "Just give the answer, don't overthink!" |
 | Evaluators | `evaluators.py` | Check secret + brevity |
-| Workspace Seeding | `workspace/CLAUDE.md` | Trivia host persona |
+| Workspace Seeding | `workspace/CLAUDE.md` | Trivia host persona via `WorkspaceSection` |
 
 ## WINK CLI
 
@@ -92,13 +92,13 @@ uv run wink query "debug_bundles/*.zip" --schema
 uv run wink query "debug_bundles/*.zip" "SELECT * FROM tool_calls"
 ```
 
-## Debug Bundle Tables
+## Debug Bundle Tables (schema v9)
 
 | Table | Description |
 |-------|-------------|
-| `manifest` | Bundle metadata (status, timestamps) |
+| `manifest` | Bundle metadata (status, timestamps, prompt info) |
 | `logs` | Log entries with optional sequence numbers |
-| `transcript` | Transcript entries from TranscriptCollector |
+| `transcript` | Transcript entries from dedicated `transcript.jsonl` artifact |
 | `tool_calls` | Tool invocations |
 | `errors` | Aggregated errors |
 | `session_slices` | Session state |
@@ -112,6 +112,6 @@ uv run wink query "debug_bundles/*.zip" "SELECT * FROM tool_calls"
 | View | Description |
 |------|-------------|
 | `tool_timeline` | Tool calls ordered by timestamp with duration |
-| `native_tool_calls` | Native tool calls from transcripts |
-| `transcript_entries` | TranscriptCollector entries |
+| `native_tool_calls` | Native tool calls from transcripts (split content blocks) |
+| `transcript_entries` | Canonical transcript entries (9 entry types) |
 | `error_summary` | Errors with truncated traceback |

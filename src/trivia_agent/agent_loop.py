@@ -7,7 +7,8 @@ This module demonstrates the full WINK architecture:
 - Feedback providers for soft course correction
 - Progressive disclosure with SUMMARY visibility
 - Custom tools attached to sections
-- Workspace seeding via ClaudeAgentWorkspaceSection
+- Skills attached to sections for section-level mounting
+- Workspace seeding via WorkspaceSection
 """
 
 from __future__ import annotations
@@ -21,9 +22,8 @@ from typing import TYPE_CHECKING, TextIO
 
 from weakincentives import FrozenDataclass, Prompt
 from weakincentives.adapters import ProviderAdapter
-from weakincentives.adapters.claude_agent_sdk import ClaudeAgentWorkspaceSection, HostMount
 from weakincentives.debug.bundle import BundleConfig
-from weakincentives.prompt import PromptTemplate
+from weakincentives.prompt import HostMount, PromptTemplate, WorkspaceSection
 from weakincentives.prompt.overrides import LocalPromptOverridesStore, PromptOverridesStore
 from weakincentives.runtime import (
     AgentLoop,
@@ -35,11 +35,12 @@ from weakincentives.runtime import (
 )
 from weakincentives.runtime.logging import configure_logging
 from weakincentives.runtime.mailbox import Mailbox
+from weakincentives.skills import SkillMount
 
 from trivia_agent.adapters import create_adapter
 from trivia_agent.config import load_redis_settings
 from trivia_agent.feedback import build_feedback_providers
-from trivia_agent.isolation import API_KEY_ENV, resolve_isolation_config
+from trivia_agent.isolation import API_KEY_ENV, has_auth, resolve_isolation_config, resolve_skills
 from trivia_agent.mailboxes import TriviaMailboxes, create_mailboxes
 from trivia_agent.models import TriviaRequest, TriviaResponse
 from trivia_agent.sections import (
@@ -99,10 +100,10 @@ def create_workspace_section(
     *,
     session: Session,
     workspace_dir: Path,
-) -> ClaudeAgentWorkspaceSection:
+) -> WorkspaceSection:
     """Create a workspace section that seeds agent workspace with host files.
 
-    Constructs a ClaudeAgentWorkspaceSection that mounts files from the host
+    Constructs a WorkspaceSection that mounts files from the host
     filesystem into the agent's sandboxed workspace. This enables the agent
     to access reference materials, persona definitions, or configuration files
     that shape its behavior.
@@ -119,7 +120,7 @@ def create_workspace_section(
             agent's workspace root.
 
     Returns:
-        ClaudeAgentWorkspaceSection: A configured section ready to be included
+        WorkspaceSection: A configured section ready to be included
             in a PromptTemplate. The section handles mounting files and provides
             the agent with filesystem access tools.
 
@@ -132,14 +133,17 @@ def create_workspace_section(
         >>> template = PromptTemplate(sections=[..., workspace_section])
     """
     mounts = enumerate_workspace_mounts(workspace_dir)
-    return ClaudeAgentWorkspaceSection(
+    return WorkspaceSection(
         session=session,
         mounts=mounts,
         allowed_host_roots=(str(workspace_dir.parent),),
     )
 
 
-def build_prompt_template() -> PromptTemplate[TriviaResponse]:
+def build_prompt_template(
+    *,
+    skills: tuple[SkillMount, ...] = (),
+) -> PromptTemplate[TriviaResponse]:
     """Build the base prompt template for the trivia agent.
 
     Constructs a PromptTemplate with all the core sections and feedback
@@ -156,10 +160,17 @@ def build_prompt_template() -> PromptTemplate[TriviaResponse]:
       via SequentialDependencyPolicy
     - **Feedback providers**: TriviaHostReminder nudges the agent to give
       direct answers without overthinking
+    - **Skills on sections**: Skills are attached to the question section
+      so the agent has access to secret knowledge during prompt rendering
 
     Note: This function returns a base template without the workspace section.
     The workspace section must be added per-request in TriviaAgentLoop.prepare()
     because it requires a Session reference.
+
+    Args:
+        skills: Tuple of SkillMount objects to attach to the question section.
+            Skills provide domain knowledge (e.g., secret answers) that the
+            agent can access during execution.
 
     Returns:
         PromptTemplate[TriviaResponse]: A configured template ready to be
@@ -175,7 +186,7 @@ def build_prompt_template() -> PromptTemplate[TriviaResponse]:
         ns="trivia",
         key="main",
         sections=[  # type: ignore[list-item]
-            build_question_section(),
+            build_question_section(skills=skills),
             build_game_rules_section(),  # Progressive disclosure - starts summarized
             build_hints_section(),  # Has attached hint_lookup tool
             build_lucky_dice_section(),  # Lucky Dice mini-game with policy enforcement
@@ -208,13 +219,14 @@ class TriviaAgentLoop(AgentLoop[TriviaRequest, TriviaResponse]):
         _workspace_dir: Path to the directory containing workspace seed files.
         _base_template: The base PromptTemplate (without workspace section).
         _overrides_store: Optional store for prompt content overrides.
+        _skills: Skills to attach to prompt sections.
 
     Example:
         >>> adapter = create_adapter(isolation=isolation_config)
         >>> loop = TriviaAgentLoop(
         ...     adapter=adapter,
         ...     requests=mailboxes.requests,
-        ...     config=AgentLoopConfig(deadline=my_deadline),
+        ...     config=AgentLoopConfig(),
         ...     workspace_dir=Path("./workspace"),
         ... )
         >>> loop.run()  # Process requests until shutdown
@@ -222,6 +234,7 @@ class TriviaAgentLoop(AgentLoop[TriviaRequest, TriviaResponse]):
 
     _workspace_dir: Path
     _base_template: PromptTemplate[TriviaResponse]
+    _skills: tuple[SkillMount, ...]
 
     def __init__(
         self,
@@ -231,6 +244,7 @@ class TriviaAgentLoop(AgentLoop[TriviaRequest, TriviaResponse]):
         config: AgentLoopConfig | None = None,
         workspace_dir: Path | None = None,
         overrides_store: PromptOverridesStore | None = None,
+        skills: tuple[SkillMount, ...] = (),
     ) -> None:
         """Initialize the trivia agent loop with required dependencies.
 
@@ -245,19 +259,21 @@ class TriviaAgentLoop(AgentLoop[TriviaRequest, TriviaResponse]):
             requests: Mailbox for receiving AgentLoopRequest[TriviaRequest] and
                 sending AgentLoopResult[TriviaResponse]. Connect this to your
                 message queue (e.g., Redis via TriviaMailboxes).
-            config: Optional AgentLoopConfig with deadline and debug bundle settings.
-                If None, uses default AgentLoop configuration. Set config.deadline
-                to control maximum execution time per request.
+            config: Optional AgentLoopConfig with debug bundle settings.
+                If None, uses default AgentLoop configuration.
             workspace_dir: Path to directory containing files to seed into agent
                 workspace. Defaults to DEFAULT_WORKSPACE_DIR (project's workspace/
                 directory). Files here become accessible to the agent.
             overrides_store: Optional PromptOverridesStore for runtime prompt
                 customization. Use LocalPromptOverridesStore to edit prompt
                 sections via files without restarting the worker.
+            skills: Tuple of SkillMount objects to attach to prompt sections.
+                Skills provide domain knowledge that the agent can access.
         """
         super().__init__(adapter=adapter, requests=requests, config=config)
         self._workspace_dir = workspace_dir or DEFAULT_WORKSPACE_DIR
-        self._base_template = build_prompt_template()
+        self._skills = skills
+        self._base_template = build_prompt_template(skills=skills)
         self._overrides_store = overrides_store
 
     def prepare(
@@ -276,8 +292,8 @@ class TriviaAgentLoop(AgentLoop[TriviaRequest, TriviaResponse]):
 
         - **Session per request**: Each request gets its own Session for proper
           isolation between concurrent requests
-        - **Dynamic workspace section**: ClaudeAgentWorkspaceSection is created
-          here (not in build_prompt_template) because it needs the Session
+        - **Dynamic workspace section**: WorkspaceSection is created here (not in
+          build_prompt_template) because it needs the Session
         - **Parameter binding**: Binds QuestionParams with the user's question
           and EmptyParams for parameterless sections
         - **Experiment support**: Uses experiment.overrides_tag to select prompt
@@ -313,7 +329,7 @@ class TriviaAgentLoop(AgentLoop[TriviaRequest, TriviaResponse]):
             ns="trivia",
             key="main",
             sections=[  # type: ignore[list-item]
-                build_question_section(),
+                build_question_section(skills=self._skills),
                 build_game_rules_section(),
                 build_hints_section(),
                 build_lucky_dice_section(),  # Lucky Dice mini-game with policy enforcement
@@ -408,11 +424,12 @@ def main(
     1. Configures logging at DEBUG level
     2. Loads Redis settings from environment variables
     3. Validates ANTHROPIC_API_KEY is set
-    4. Creates the provider adapter with skill isolation
-    5. Connects to Redis mailboxes for request/response queues
-    6. Creates TriviaAgentLoop with deadline and debug bundle config
-    7. Creates EvalLoop for evaluation requests
-    8. Runs both loops in a LoopGroup until shutdown
+    4. Creates the provider adapter with isolation config
+    5. Discovers skills for section-level mounting
+    6. Connects to Redis mailboxes for request/response queues
+    7. Creates TriviaAgentLoop with debug bundle config and skills
+    8. Creates EvalLoop for evaluation requests
+    9. Runs both loops in a LoopGroup until shutdown
 
     Required Environment Variables:
         ANTHROPIC_API_KEY: API key for Claude (validated early with clear error)
@@ -457,13 +474,21 @@ def main(
 
     assert settings is not None  # for type checker
 
-    # Validate API key early - this is the most common first-run error
-    if rt.adapter is None and not os.environ.get(API_KEY_ENV):
+    # Validate authentication early - this is the most common first-run error
+    if rt.adapter is None and not has_auth(os.environ):
         err.write(f"Missing {API_KEY_ENV}. Set it with: export {API_KEY_ENV}=your-api-key\n")
         return 1
 
-    # Resolve isolation config with skills
+    # Unset CLAUDECODE to allow nested Claude Code sessions.
+    # The Claude Agent SDK spawns a claude subprocess, which refuses to run
+    # if it detects it's inside another Claude Code session.
+    os.environ.pop("CLAUDECODE", None)
+
+    # Resolve isolation config (sandbox, API key — no longer includes skills)
     isolation = resolve_isolation_config(os.environ)
+
+    # Discover skills for section-level mounting
+    skills = resolve_skills(os.environ)
 
     # Use injected or create real dependencies
     try:
@@ -490,12 +515,13 @@ def main(
     if settings.prompt_overrides_dir:
         overrides_store = LocalPromptOverridesStore(root_path=settings.prompt_overrides_dir)
 
-    # Create the main loop
+    # Create the main loop with skills attached to sections
     loop = TriviaAgentLoop(
         adapter=adapter,
         requests=mailboxes.requests,
         config=config,
         overrides_store=overrides_store,
+        skills=skills,
     )
 
     # Create the eval loop (imported here to avoid circular import)
