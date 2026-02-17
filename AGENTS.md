@@ -34,7 +34,9 @@ make check
 
 # Start Redis and run the agent
 make redis
-make agent
+make agent                        # Default: claude adapter
+make agent ADAPTER=codex          # Use Codex adapter
+make agent ADAPTER=opencode       # Use OpenCode adapter
 
 # Ask about secrets
 make dispatch QUESTION="What is the secret number?"
@@ -42,6 +44,10 @@ make dispatch QUESTION="What is the secret word?"
 
 # Run evals
 make dispatch-eval QUESTION="What is the secret number?" EXPECTED="42"
+
+# Integration tests with different adapters
+make integration-test                  # Default: claude
+make integration-test ADAPTER=codex    # Test with Codex
 ```
 
 ## Repository Structure

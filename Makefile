@@ -11,6 +11,8 @@ help:
 	@echo ""
 	@echo "Run:"
 	@echo "  make agent          Start the Secret Trivia agent worker"
+	@echo "  make agent ADAPTER=codex     Start with Codex adapter"
+	@echo "  make agent ADAPTER=opencode  Start with OpenCode adapter"
 	@echo "  make dispatch       Submit a test question (set QUESTION=...)"
 	@echo "  make dispatch-eval  Submit an eval case with experiment metadata"
 	@echo ""
@@ -66,9 +68,11 @@ EXPECTED ?= ""
 EXPERIMENT ?= cli-eval
 OWNER ?=
 DESCRIPTION ?=
+ADAPTER ?= claude
 
 agent:
 	REDIS_URL=$(REDIS_URL) \
+	TRIVIA_ADAPTER=$(ADAPTER) \
 	TRIVIA_DEBUG_BUNDLES_DIR=$(TRIVIA_DEBUG_BUNDLES_DIR) \
 	TRIVIA_PROMPT_OVERRIDES_DIR=$(TRIVIA_PROMPT_OVERRIDES_DIR) \
 	uv run trivia-agent
@@ -103,7 +107,7 @@ test:
 	uv run pytest tests -v
 
 integration-test:
-	uv run pytest integration-tests/ -v --timeout=300 --no-cov
+	TRIVIA_ADAPTER=$(ADAPTER) uv run pytest integration-tests/ -v --timeout=300 --no-cov
 
 # =============================================================================
 # Cleanup
