@@ -346,7 +346,7 @@ class TestMain:
             result = main(runtime=runtime)
 
         assert result == 0
-        assert "Starting trivia agent worker" in out.getvalue()
+        assert "Starting trivia agent worker (adapter=claude)" in out.getvalue()
         mock_instance.run.assert_called_once()
 
     def test_creates_real_dependencies_when_not_injected(
@@ -521,3 +521,91 @@ class TestMain:
         assert result == 1
         assert "Failed to connect to Redis" in err.getvalue()
         assert "Connection refused" in err.getvalue()
+
+    def test_codex_adapter_skips_auth_check(
+        self,
+        fake_mailboxes: TriviaMailboxes,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that codex adapter does not require ANTHROPIC_API_KEY."""
+        out = io.StringIO()
+        err = io.StringIO()
+        mock_adapter: ProviderAdapter[TriviaResponse] = MagicMock()
+
+        runtime = TriviaRuntime(
+            adapter=mock_adapter,
+            mailboxes=fake_mailboxes,
+            out=out,
+            err=err,
+        )
+
+        monkeypatch.setenv("REDIS_URL", "redis://localhost:6379")
+        monkeypatch.setenv("TRIVIA_ADAPTER", "codex")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("CLAUDE_CODE_USE_BEDROCK", raising=False)
+
+        with patch("trivia_agent.agent_loop.LoopGroup") as mock_loop_group:
+            mock_instance = MagicMock()
+            mock_loop_group.return_value = mock_instance
+            result = main(runtime=runtime)
+
+        assert result == 0
+        assert "adapter=codex" in out.getvalue()
+
+    def test_opencode_adapter_skips_auth_check(
+        self,
+        fake_mailboxes: TriviaMailboxes,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that opencode adapter does not require ANTHROPIC_API_KEY."""
+        out = io.StringIO()
+        err = io.StringIO()
+        mock_adapter: ProviderAdapter[TriviaResponse] = MagicMock()
+
+        runtime = TriviaRuntime(
+            adapter=mock_adapter,
+            mailboxes=fake_mailboxes,
+            out=out,
+            err=err,
+        )
+
+        monkeypatch.setenv("REDIS_URL", "redis://localhost:6379")
+        monkeypatch.setenv("TRIVIA_ADAPTER", "opencode")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("CLAUDE_CODE_USE_BEDROCK", raising=False)
+
+        with patch("trivia_agent.agent_loop.LoopGroup") as mock_loop_group:
+            mock_instance = MagicMock()
+            mock_loop_group.return_value = mock_instance
+            result = main(runtime=runtime)
+
+        assert result == 0
+        assert "adapter=opencode" in out.getvalue()
+
+    def test_startup_message_includes_adapter_name(
+        self,
+        fake_mailboxes: TriviaMailboxes,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that startup message includes the adapter name."""
+        out = io.StringIO()
+        err = io.StringIO()
+        mock_adapter: ProviderAdapter[TriviaResponse] = MagicMock()
+
+        runtime = TriviaRuntime(
+            adapter=mock_adapter,
+            mailboxes=fake_mailboxes,
+            out=out,
+            err=err,
+        )
+
+        monkeypatch.setenv("REDIS_URL", "redis://localhost:6379")
+        monkeypatch.setenv("TRIVIA_ADAPTER", "codex")
+
+        with patch("trivia_agent.agent_loop.LoopGroup") as mock_loop_group:
+            mock_instance = MagicMock()
+            mock_loop_group.return_value = mock_instance
+            result = main(runtime=runtime)
+
+        assert result == 0
+        assert "Starting trivia agent worker (adapter=codex)..." in out.getvalue()

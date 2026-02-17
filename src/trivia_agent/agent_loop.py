@@ -37,7 +37,11 @@ from weakincentives.runtime.logging import configure_logging
 from weakincentives.runtime.mailbox import Mailbox
 from weakincentives.skills import SkillMount
 
-from trivia_agent.adapters import SimpleTaskCompletionChecker, create_adapter
+from trivia_agent.adapters import (
+    SimpleTaskCompletionChecker,
+    create_adapter,
+    resolve_adapter_choice,
+)
 from trivia_agent.config import load_redis_settings
 from trivia_agent.feedback import build_feedback_providers
 from trivia_agent.isolation import API_KEY_ENV, has_auth, resolve_isolation_config, resolve_skills
@@ -476,8 +480,11 @@ def main(
 
     assert settings is not None  # for type checker
 
-    # Validate authentication early - this is the most common first-run error
-    if rt.adapter is None and not has_auth(os.environ):
+    # Determine which adapter backend to use
+    adapter_choice = resolve_adapter_choice(os.environ)
+
+    # Validate authentication early - only needed for the claude adapter
+    if rt.adapter is None and adapter_choice == "claude" and not has_auth(os.environ):
         err.write(f"Missing {API_KEY_ENV}. Set it with: export {API_KEY_ENV}=your-api-key\n")
         return 1
 
@@ -486,15 +493,15 @@ def main(
     # if it detects it's inside another Claude Code session.
     os.environ.pop("CLAUDECODE", None)
 
-    # Resolve isolation config (sandbox, API key — no longer includes skills)
-    isolation = resolve_isolation_config(os.environ)
+    # Resolve isolation config (sandbox, API key — only needed for claude adapter)
+    isolation = resolve_isolation_config(os.environ) if adapter_choice == "claude" else None
 
     # Discover skills for section-level mounting
     skills = resolve_skills(os.environ)
 
     # Use injected or create real dependencies
     try:
-        adapter = rt.adapter or create_adapter(isolation=isolation)
+        adapter = rt.adapter or create_adapter(adapter_choice, isolation=isolation)
     except Exception as e:
         err.write(f"Failed to create adapter: {e}\n")
         return 1
@@ -536,7 +543,7 @@ def main(
     )
 
     # Run both loops
-    out.write("Starting trivia agent worker...\n")
+    out.write(f"Starting trivia agent worker (adapter={adapter_choice})...\n")
     group = LoopGroup(loops=[loop, eval_loop])  # type: ignore[list-item]
     group.run()
 

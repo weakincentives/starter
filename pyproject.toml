@@ -5,7 +5,7 @@ description = "Secret Trivia Agent - a WINK starter demonstrating background age
 requires-python = ">=3.12"
 dependencies = [
     "redis",
-    "weakincentives[claude-agent-sdk,redis,skills]",
+    "weakincentives[claude-agent-sdk,acp,redis,skills]",
 ]
 
 [project.scripts]

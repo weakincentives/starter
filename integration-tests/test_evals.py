@@ -66,6 +66,7 @@ def agent(redis_url: str) -> Generator[subprocess.Popen[bytes], None, None]:
     """Start the trivia agent."""
     env = os.environ.copy()
     env["REDIS_URL"] = redis_url
+    env["TRIVIA_ADAPTER"] = os.environ.get("TRIVIA_ADAPTER", "claude")
 
     # Enable debug bundle generation
     project_root = Path(__file__).parent.parent
