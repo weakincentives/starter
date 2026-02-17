@@ -38,7 +38,7 @@ This simple concept naturally demonstrates all of WINK's key capabilities:
 - Planning/act loop, sandboxing, tool-call orchestration
 - Scheduling, crash recovery, operational guardrails
 
-**WINK's thesis**: Harnesses keep changing (and increasingly come from vendor runtimes), but your agent definition should not. WINK makes the definition a first-class artifact you can version, review, test, and port across runtimes via adapters.
+**WINK's thesis**: Harnesses keep changing (and increasingly come from vendor runtimes), but your agent definition should not. WINK makes the definition a first-class artifact you can version, review, test, and port across runtimes via adapters. This starter demonstrates that portability — the same trivia agent runs on **Claude Agent SDK**, **Codex App Server**, and **OpenCode ACP** by switching a single environment variable.
 
 ## Project Structure
 
@@ -84,17 +84,30 @@ make install
 make redis
 ```
 
-### 3. Set your API key
+### 3. Configure authentication
+
+The starter supports three execution adapters. Set up credentials for the one you plan to use:
 
 ```bash
+# Claude (default) — Anthropic API or AWS Bedrock
 export ANTHROPIC_API_KEY=your-api-key
+# or
+export CLAUDE_CODE_USE_BEDROCK=1
+
+# Codex — requires the codex CLI on PATH
+# (no extra env vars needed)
+
+# OpenCode — requires the opencode CLI on PATH
+# (no extra env vars needed)
 ```
 
 ### 4. Run the agent
 
 In one terminal, start the worker:
 ```bash
-make agent
+make agent                    # Claude adapter (default)
+make agent ADAPTER=codex      # Codex adapter
+make agent ADAPTER=opencode   # OpenCode adapter
 ```
 
 In another terminal, ask about secrets:
@@ -296,7 +309,8 @@ The evaluator checks:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | Yes | - | Anthropic API key |
+| `TRIVIA_ADAPTER` | No | `claude` | Adapter backend: `claude`, `codex`, or `opencode` |
+| `ANTHROPIC_API_KEY` | Claude only | - | Anthropic API key (or set `CLAUDE_CODE_USE_BEDROCK`) |
 | `REDIS_URL` | No | `redis://localhost:6379` | Redis connection URL |
 | `TRIVIA_REQUESTS_QUEUE` | No | `trivia:requests` | Request queue name |
 | `TRIVIA_EVAL_REQUESTS_QUEUE` | No | `trivia:eval:requests` | Eval queue name |
@@ -308,7 +322,9 @@ The evaluator checks:
 ```bash
 make check             # Format, lint, typecheck, test
 make test              # Run unit tests with coverage
-make integration-test  # Run integration tests (requires Redis + API key)
+make integration-test  # Run integration tests (default: claude adapter)
+make integration-test ADAPTER=codex     # Integration tests with Codex
+make integration-test ADAPTER=opencode  # Integration tests with OpenCode
 make format            # Format code
 ```
 
@@ -343,8 +359,12 @@ make format            # Format code
                               │
                               ▼
 ┌────────────────────────────────────────────────────────────────┐
-│                   Claude Agent SDK (Harness)                   │
-│  - Planning/act loop, sandboxing, tool-call orchestration      │
+│               Execution Harness (via Adapter)                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐ │
+│  │ Claude Agent  │  │ Codex App    │  │ OpenCode ACP         │ │
+│  │ SDK          │  │ Server       │  │                      │ │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘ │
+│  Set TRIVIA_ADAPTER=claude|codex|opencode (default: claude)   │
 └────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -378,7 +398,7 @@ Then read the TOOLS guide and explain how tools work in WINK.
 
 ### Manual Testing
 
-With `ANTHROPIC_API_KEY` and `REDIS_URL` set in your environment, Claude can perform end-to-end manual testing:
+With your adapter configured and `REDIS_URL` set, Claude can perform end-to-end manual testing:
 
 ```
 Start Redis and the agent, then test all four secrets by dispatching
@@ -465,6 +485,8 @@ Query the debug bundles to show me what data is captured during execution:
 
 **"Connection refused" errors**: Make sure Redis is running (`make redis`).
 
-**"API key not found"**: Ensure `ANTHROPIC_API_KEY` is set.
+**"API key not found"**: Only applies to the claude adapter. Set `ANTHROPIC_API_KEY` or `CLAUDE_CODE_USE_BEDROCK`.
+
+**"codex/opencode binary not found"**: Install the respective CLI and ensure it's on your `PATH`.
 
 **Agent doesn't know secrets**: Check that `skills/secret-trivia/SKILL.md` exists and contains the answers.
