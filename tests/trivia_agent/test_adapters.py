@@ -2,10 +2,8 @@
 
 from unittest.mock import MagicMock
 
-from weakincentives.adapters.claude_agent_sdk import (
-    ClaudeAgentSDKAdapter,
-    TaskCompletionResult,
-)
+from weakincentives.adapters.claude_agent_sdk import ClaudeAgentSDKAdapter
+from weakincentives.prompt import TaskCompletionResult
 
 from trivia_agent.adapters import SimpleTaskCompletionChecker, create_adapter
 
@@ -44,14 +42,13 @@ class TestCreateAdapter:
         assert adapter is not None
 
     def test_adapter_has_client_config(self) -> None:
-        """Test that adapter is configured with task completion checker."""
+        """Test that adapter is configured with client config."""
         adapter = create_adapter()
-        # Verify adapter was created with client config
+        # Verify adapter was created with client config (no task_completion_checker —
+        # that's now on the PromptTemplate)
         assert adapter._client_config is not None
-        assert adapter._client_config.task_completion_checker is not None
 
-    def test_adapter_task_completion_checker_is_simple_checker(self) -> None:
-        """Test that the task completion checker is SimpleTaskCompletionChecker."""
+    def test_adapter_no_task_completion_on_client_config(self) -> None:
+        """Test that task completion checker is not on client config (moved to prompt)."""
         adapter = create_adapter()
-        checker = adapter._client_config.task_completion_checker
-        assert isinstance(checker, SimpleTaskCompletionChecker)
+        assert not hasattr(adapter._client_config, "task_completion_checker")
