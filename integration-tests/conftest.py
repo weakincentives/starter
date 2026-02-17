@@ -26,7 +26,9 @@ def pytest_collection_modifyitems(
     skip_reason: str | None = None
 
     if adapter == "claude":
-        if not os.environ.get("ANTHROPIC_API_KEY"):
+        if not os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get(
+            "CLAUDE_CODE_USE_BEDROCK"
+        ):
             skip_reason = "ANTHROPIC_API_KEY not set - skipping integration tests"
     elif adapter == "codex":
         if shutil.which("codex") is None:
