@@ -41,7 +41,7 @@ include = ["src"]
 typeCheckingMode = "strict"
 
 [tool.uv.sources]
-weakincentives = { git = "https://github.com/weakincentives/weakincentives.git", tag = "v0.26.0" }
+weakincentives = { git = "https://github.com/weakincentives/weakincentives.git", tag = "v0.27.0" }
 
 [dependency-groups]
 dev = [
@@ -51,6 +51,6 @@ dev = [
     "pytest-timeout",
     "pyright",
     "ruff",
-    "weakincentives[wink] @ git+https://github.com/weakincentives/weakincentives.git@v0.26.0",
+    "weakincentives[wink] @ git+https://github.com/weakincentives/weakincentives.git@v0.27.0",
     "pytest-rerunfailures>=16.1",
 ]

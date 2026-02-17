@@ -5,7 +5,7 @@ runtime. The adapter configures how the agent interacts with the Claude model,
 handles task completion, and manages execution isolation.
 
 Key components:
-    - ``SimpleTaskCompletionChecker``: Pass-through completion checker
+    - ``SimpleTaskCompletionChecker``: Pass-through completion checker (used by prompt)
     - ``create_adapter``: Factory function to build configured adapters
 
 The default model is Claude Sonnet, accessed via the "sonnet" alias.
@@ -20,12 +20,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from weakincentives.adapters.claude_agent_sdk import (
-    ClaudeAgentSDKAdapter,
-    TaskCompletionContext,
-    TaskCompletionResult,
-)
+from weakincentives.adapters.claude_agent_sdk import ClaudeAgentSDKAdapter
 from weakincentives.adapters.claude_agent_sdk.config import ClaudeAgentSDKClientConfig
+from weakincentives.prompt import TaskCompletionContext, TaskCompletionResult
 
 from trivia_agent.models import TriviaResponse
 
@@ -87,14 +84,16 @@ def create_adapter(
     """Create and configure a Claude Agent SDK adapter for the trivia agent.
 
     Factory function that assembles all components needed to run the trivia
-    agent: model selection, task completion checking, isolation configuration,
-    and working directory setup. The returned adapter is ready to be passed
-    to a WINK AgentLoop or EvalLoop.
+    agent: model selection, isolation configuration, and working directory
+    setup. The returned adapter is ready to be passed to a WINK AgentLoop
+    or EvalLoop.
 
     The adapter is configured with:
         - Model: Claude Sonnet (via the "sonnet" alias)
-        - Completion checker: SimpleTaskCompletionChecker (always succeeds)
         - Response type: TriviaResponse (structured output schema)
+
+    Note: Task completion checking is declared on the PromptTemplate (see
+    agent_loop.py), not on the adapter config.
 
     Args:
         isolation: Optional isolation configuration that controls the agent's
@@ -119,9 +118,7 @@ def create_adapter(
         >>> # Use adapter with AgentLoop
         >>> loop = AgentLoop.create(adapter=adapter, sections=[...])
     """
-    checker = SimpleTaskCompletionChecker()
     client_config = ClaudeAgentSDKClientConfig(
-        task_completion_checker=checker,
         isolation=isolation,
         cwd=cwd,
     )

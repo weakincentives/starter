@@ -37,7 +37,7 @@ from weakincentives.runtime.logging import configure_logging
 from weakincentives.runtime.mailbox import Mailbox
 from weakincentives.skills import SkillMount
 
-from trivia_agent.adapters import create_adapter
+from trivia_agent.adapters import SimpleTaskCompletionChecker, create_adapter
 from trivia_agent.config import load_redis_settings
 from trivia_agent.feedback import build_feedback_providers
 from trivia_agent.isolation import API_KEY_ENV, has_auth, resolve_isolation_config, resolve_skills
@@ -193,6 +193,7 @@ def build_prompt_template(
             build_task_examples_section(),  # Multi-step workflow examples
         ],
         feedback_providers=build_feedback_providers(),
+        task_completion_checker=SimpleTaskCompletionChecker(),
     )
 
 
@@ -337,6 +338,7 @@ class TriviaAgentLoop(AgentLoop[TriviaRequest, TriviaResponse]):
                 workspace_section,  # Session-bound workspace access
             ],
             feedback_providers=build_feedback_providers(),
+            task_completion_checker=SimpleTaskCompletionChecker(),
         )
 
         # Determine overrides tag from experiment
